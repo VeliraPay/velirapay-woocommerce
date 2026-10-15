@@ -71,8 +71,11 @@ final class StatusSync
                 $code,
             )),
             'charge.late_payment' => $order->addNote(sprintf(
-                /* translators: 1: amount, 2: coin, 3: charge code */
-                __('A late payment of %1$s %2$s arrived on charge %3$s. Accept or refund it in the VeliraPay dashboard.', 'velirapay-woocommerce'),
+                ($charge['status'] ?? null) === 'paid'
+                    /* translators: 1: amount, 2: coin, 3: charge code */
+                    ? __('An additional payment of %1$s %2$s arrived on charge %3$s; it is added to the charge once confirmed.', 'velirapay-woocommerce')
+                    /* translators: 1: amount, 2: coin, 3: charge code */
+                    : __('A late payment of %1$s %2$s arrived on charge %3$s. Accept it in the VeliraPay dashboard; refund it from your wallet after accepting.', 'velirapay-woocommerce'),
                 $seen,
                 $asset,
                 $code,
