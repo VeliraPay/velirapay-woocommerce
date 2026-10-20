@@ -13,6 +13,11 @@ use VeliraPay\WooCommerce\Orders\StatusSync;
 final class Handler
 {
     /**
+     * The event of the challenge an endpoint is sent when it is added or moved.
+     */
+    private const VERIFICATION_EVENT = 'webhook.verification';
+
+    /**
      * Create a new handler.
      *
      * @param  string  $mode  The mode the gateway works in, "live" or "test"; deliveries of the other mode are ignored.
@@ -43,6 +48,13 @@ final class Handler
 
         if (! is_array($delivery) || ! is_string($event) || $event === '') {
             return self::answer(400, 'The payload is not a webhook delivery.');
+        }
+
+        // Sent when the endpoint is added or moved: VeliraPay sends it nothing else until it answers with the challenge.
+        if ($event === self::VERIFICATION_EVENT) {
+            $challenge = is_array($delivery['data'] ?? null) ? ($delivery['data']['challenge'] ?? null) : null;
+
+            return is_string($challenge) ? self::answer(200, $challenge) : self::answer(400, 'The challenge is missing.');
         }
 
         if (($delivery['test'] ?? false) === true) {

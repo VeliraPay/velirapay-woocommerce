@@ -87,6 +87,27 @@ final class HandlerTest extends TestCase
         $this->assertSame([], $order->events);
     }
 
+    public function test_the_verification_challenge_is_answered_with_the_challenge(): void
+    {
+        $order = new FakeOrder('pending');
+        $payload = '{"id":"0199f0c2-2b7a-7c0e-9d3a-5e8f1a2b3c4d","event":"webhook.verification","mode":"test","created_at":"2026-10-19T22:00:00.000000Z","data":{"challenge":"c4Lr9xT2mQ7vZ1"}}';
+
+        $response = $this->handler($order)->handle($payload, Signature::header($payload, self::TEST_SECRET));
+
+        $this->assertSame(['status' => 200, 'body' => 'c4Lr9xT2mQ7vZ1'], $response);
+        $this->assertSame([], $order->notes);
+    }
+
+    public function test_an_unsigned_verification_challenge_is_refused(): void
+    {
+        $payload = '{"id":"0199f0c2-2b7a-7c0e-9d3a-5e8f1a2b3c4d","event":"webhook.verification","mode":"live","data":{"challenge":"c4Lr9xT2mQ7vZ1"}}';
+
+        $response = $this->handler(new FakeOrder('pending'))->handle($payload, Signature::header($payload, 'whsec_someone_else'));
+
+        $this->assertSame(400, $response['status']);
+        $this->assertStringNotContainsString('c4Lr9xT2mQ7vZ1', $response['body']);
+    }
+
     public function test_a_delivery_of_the_other_mode_is_acknowledged_and_ignored(): void
     {
         $order = new FakeOrder('pending');

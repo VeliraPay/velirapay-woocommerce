@@ -2,6 +2,10 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+- The webhook receiver answers the `webhook.verification` challenge VeliraPay now sends an endpoint when it is added or its URL changes, which it must answer before it receives anything else.
+
 ## 0.1.0 - 2026-10-13
 
 First release.

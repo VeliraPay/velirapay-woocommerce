@@ -32,8 +32,9 @@ Refunds are not automated. Crypto cannot be pulled back: send the coins from you
 1. Install and activate the plugin. WooCommerce 8.3 or later must be active.
 2. In the VeliraPay dashboard, under Developers → API keys, create an API key.
 3. Go to WooCommerce → Settings → Payments → VeliraPay and paste the key into the live or test field.
-4. Under Developers → Webhooks in the dashboard, add an endpoint with the webhook URL shown on the settings page and tick the invoice.paid, invoice.voided, charge.payment_detected, charge.underpaid, charge.expired, charge.late_payment and charge.refunded events. Copy its signing secret into the settings page.
+4. Under Developers → Webhooks in the dashboard, add an endpoint with the webhook URL shown on the settings page (it must start with https://) and tick the invoice.paid, invoice.voided, charge.payment_detected, charge.underpaid, charge.expired, charge.late_payment and charge.refunded events. Copy its signing secret into the settings page.
 5. Enable the gateway and save.
+6. Back on the endpoint's page in the dashboard, press Verify. The plugin answers the challenge VeliraPay sends, and the endpoint receives nothing until it has.
 
 Live and test mode each need their own key and endpoint: switch the dashboard to test mode to create the test ones, then turn on "Test mode" in the settings to use them.
 
