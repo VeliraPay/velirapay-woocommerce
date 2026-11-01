@@ -81,6 +81,27 @@ final class StatusSyncTest extends TestCase
         $this->assertCount(1, $order->notes);
     }
 
+    public function test_polling_a_paid_invoice_that_no_longer_covers_an_order_already_on_hold_still_notes_it(): void
+    {
+        $order = new FakeOrder('on-hold', total: '64.90');
+
+        (new StatusSync)->applyInvoice($order, self::invoice('paid', [['id' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']]));
+
+        $this->assertSame('on-hold', $order->status);
+        $this->assertCount(1, $order->notes);
+        $this->assertStringContainsString('so it was not marked paid', $order->notes[0]);
+    }
+
+    public function test_a_mismatch_noted_by_the_webhook_is_not_noted_again_by_polling(): void
+    {
+        $order = new FakeOrder('pending', total: '64.90');
+
+        (new StatusSync)->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid')]);
+        (new StatusSync)->applyInvoice($order, ['id' => 'w7c2h5j9d3kx', ...self::invoice('paid')]);
+
+        $this->assertCount(1, $order->notes);
+    }
+
     public function test_a_voided_invoice_cancels_the_order(): void
     {
         $order = new FakeOrder('pending');
