@@ -103,7 +103,7 @@ final class StatusSync
     public function applyInvoice(Order $order, array $invoice): void
     {
         match ($invoice['status'] ?? null) {
-            'paid' => $this->markPaid($order, $invoice, polled: true),
+            'paid' => $this->markPaid($order, $invoice),
             'void' => $this->cancel($order, __('The VeliraPay invoice was voided and can no longer be paid.', 'velirapay-woocommerce')),
             default => $this->holdIfUnderpaid($order, $invoice),
         };
@@ -113,9 +113,8 @@ final class StatusSync
      * Record the payment with the charge that paid the invoice, once, or hold the order when the invoice no longer covers it.
      *
      * @param  array<array-key, mixed>  $invoice
-     * @param  bool  $polled  Whether the invoice was polled, so a hold already noted is not noted again on every poll.
      */
-    private function markPaid(Order $order, array $invoice, bool $polled = false): void
+    private function markPaid(Order $order, array $invoice): void
     {
         if ($order->isPaid()) {
             return;
@@ -124,7 +123,10 @@ final class StatusSync
         $charge = self::chargeWithStatus($invoice, 'paid');
 
         if (! self::covers($invoice, $order)) {
-            if ($polled && $order->status() === 'on-hold') {
+            // Remembered like an event, so the webhook and every later poll note the mismatch once between them.
+            $mismatch = 'amount-mismatch:'.self::text($invoice['code'] ?? $invoice['id'] ?? null);
+
+            if ($order->hasHandledEvent($mismatch)) {
                 return;
             }
 
@@ -136,6 +138,7 @@ final class StatusSync
                 trim(self::money($invoice['amount'] ?? null).' '.self::text($invoice['currency'] ?? null)),
                 trim(self::money($order->total()).' '.$order->currency()),
             ));
+            $order->rememberEvent($mismatch);
 
             return;
         }
