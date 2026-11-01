@@ -17,6 +17,11 @@ final class WooCommerceOrder implements Order
     public const INVOICE_CODE_META = '_velirapay_invoice_code';
 
     /**
+     * The meta key holding the codes of the invoices the order used before, one row each.
+     */
+    public const SUPERSEDED_INVOICE_CODE_META = '_velirapay_superseded_invoice_code';
+
+    /**
      * The meta key holding the hosted page of that invoice.
      */
     public const INVOICE_URL_META = '_velirapay_invoice_url';
@@ -53,7 +58,15 @@ final class WooCommerceOrder implements Order
      */
     public static function rememberInvoice(WC_Order $order, array $invoice): void
     {
-        $order->update_meta_data(self::INVOICE_CODE_META, is_scalar($invoice['id'] ?? null) ? (string) $invoice['id'] : '');
+        $previous = self::invoiceCodeOf($order);
+        $code = is_scalar($invoice['id'] ?? null) ? (string) $invoice['id'] : '';
+
+        // Kept so a payment that still reaches the old invoice is matched to the order rather than ignored.
+        if ($previous !== '' && $previous !== $code) {
+            $order->add_meta_data(self::SUPERSEDED_INVOICE_CODE_META, $previous);
+        }
+
+        $order->update_meta_data(self::INVOICE_CODE_META, $code);
         $order->update_meta_data(self::INVOICE_URL_META, is_scalar($invoice['hosted_url'] ?? null) ? (string) $invoice['hosted_url'] : '');
         $order->save();
     }

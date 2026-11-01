@@ -96,6 +96,67 @@ final class StatusSync
     }
 
     /**
+     * Apply a webhook event about an invoice the order used before it was replaced: money reaching it is held for the
+     * merchant to sort out, never counted as the order's payment, and anything else about it is left alone.
+     *
+     * @param  string  $event  The event type, such as "invoice.paid".
+     * @param  array<array-key, mixed>  $data  The delivery's data: the invoice, or the charge and its transfer.
+     */
+    public function applySupersededEvent(Order $order, string $event, array $data): void
+    {
+        $invoice = is_array($data['invoice'] ?? null) ? $data['invoice'] : [];
+        $charge = is_array($data['charge'] ?? null) ? $data['charge'] : [];
+        $transfer = is_array($data['transaction'] ?? null) ? $data['transaction'] : [];
+        $number = self::text($invoice['number'] ?? (is_array($charge['invoice'] ?? null) ? ($charge['invoice']['number'] ?? null) : null));
+        $asset = self::text($charge['asset'] ?? null);
+        $seen = self::amount($transfer['amount'] ?? $charge['asset_amount'] ?? null);
+
+        match ($event) {
+            'invoice.paid' => $this->holdForSupersededPayment($order, $invoice, $number),
+            'charge.payment_detected', 'charge.underpaid', 'charge.late_payment' => $order->addNote(sprintf(
+                /* translators: 1: amount, 2: coin, 3: charge code, 4: invoice number */
+                __('A payment of %1$s %2$s reached charge %3$s of VeliraPay invoice %4$s, which this order used before it was replaced. Check it in the VeliraPay dashboard.', 'velirapay-woocommerce'),
+                $seen,
+                $asset,
+                self::text($charge['code'] ?? null),
+                $number,
+            )),
+            default => null,
+        };
+    }
+
+    /**
+     * Hold the order for a replaced invoice that was paid, or note a second payment on an order already paid.
+     *
+     * @param  array<array-key, mixed>  $invoice
+     */
+    private function holdForSupersededPayment(Order $order, array $invoice, string $number): void
+    {
+        $charge = self::chargeWithStatus($invoice, 'paid');
+        $paid = trim(self::money($invoice['amount'] ?? null).' '.self::text($invoice['currency'] ?? null));
+
+        if ($order->isPaid()) {
+            $order->addNote(sprintf(
+                /* translators: 1: invoice number, 2: charge code, 3: amount and currency */
+                __('VeliraPay invoice %1$s, which this order used before it was replaced, was paid as well (charge %2$s, %3$s): the customer has paid twice. Refund the extra payment from your wallet and record it in the VeliraPay dashboard.', 'velirapay-woocommerce'),
+                $number,
+                $charge,
+                $paid,
+            ));
+
+            return;
+        }
+
+        $this->hold($order, sprintf(
+            /* translators: 1: invoice number, 2: charge code, 3: amount and currency */
+            __('VeliraPay invoice %1$s, which this order used before it was replaced, was paid (charge %2$s, %3$s). The order was not marked paid: check the payment against the order, and void its current invoice once it is settled.', 'velirapay-woocommerce'),
+            $number,
+            $charge,
+            $paid,
+        ));
+    }
+
+    /**
      * Apply the invoice as the API describes it now, after polling it.
      *
      * @param  array<array-key, mixed>  $invoice  The invoice object from GET /v1/invoices/{id}.

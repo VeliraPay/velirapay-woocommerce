@@ -152,6 +152,66 @@ final class HandlerTest extends TestCase
         $this->assertSame([], $order->notes);
     }
 
+    public function test_a_replaced_invoice_paid_after_all_holds_its_order_instead_of_completing_it(): void
+    {
+        $order = new FakeOrder('pending');
+        $payload = self::payload('invoice.paid', 'live', ['invoice' => [
+            'code' => 'old000000000',
+            'number' => 'INV-0041',
+            'status' => 'paid',
+            'amount' => '49.90',
+            'currency' => 'EUR',
+            'charges' => [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'BTC']],
+        ]]);
+
+        $response = $this->handler($order, superseded: ['old000000000' => $order])->handle($payload, Signature::header($payload, self::LIVE_SECRET));
+
+        $this->assertSame(200, $response['status']);
+        $this->assertSame('Handled invoice.paid for invoice old000000000, which the order has replaced.', $response['body']);
+        $this->assertSame('on-hold', $order->status);
+        $this->assertNull($order->transactionId);
+        $this->assertSame(['VeliraPay invoice INV-0041, which this order used before it was replaced, was paid (charge z8x6c4v2b0nm, 49.90 EUR). The order was not marked paid: check the payment against the order, and void its current invoice once it is settled.'], $order->notes);
+        $this->assertSame(['9b1f7a3e-2c4d-4e8f-a6b0-1d2c3e4f5a6b'], $order->events);
+    }
+
+    public function test_a_replaced_invoice_paid_after_the_order_was_paid_says_the_customer_paid_twice(): void
+    {
+        $order = new FakeOrder('processing');
+        $payload = self::payload('invoice.paid', 'live', ['invoice' => ['code' => 'old000000000', 'number' => 'INV-0041', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR', 'charges' => [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'BTC']]]]);
+
+        $this->handler($order, superseded: ['old000000000' => $order])->handle($payload, Signature::header($payload, self::LIVE_SECRET));
+
+        $this->assertSame('processing', $order->status);
+        $this->assertCount(1, $order->notes);
+        $this->assertStringContainsString('the customer has paid twice', $order->notes[0]);
+    }
+
+    public function test_a_late_payment_on_a_replaced_invoice_is_noted_on_its_order(): void
+    {
+        $order = new FakeOrder('pending');
+        $payload = self::payload('charge.late_payment', 'live', [
+            'charge' => ['code' => 'k3v9x2m7q8wz', 'status' => 'canceled', 'asset' => 'BTC', 'asset_amount' => '0.002500000000000000', 'invoice' => ['code' => 'old000000000', 'number' => 'INV-0041']],
+            'transaction' => ['amount' => '0.002500000000000000'],
+        ]);
+
+        $this->handler($order, superseded: ['old000000000' => $order])->handle($payload, Signature::header($payload, self::LIVE_SECRET));
+
+        $this->assertSame('pending', $order->status);
+        $this->assertSame(['A payment of 0.0025 BTC reached charge k3v9x2m7q8wz of VeliraPay invoice INV-0041, which this order used before it was replaced. Check it in the VeliraPay dashboard.'], $order->notes);
+    }
+
+    public function test_the_void_of_a_replaced_invoice_leaves_its_order_alone(): void
+    {
+        $order = new FakeOrder('pending');
+        $payload = self::payload('invoice.voided', 'live', ['invoice' => ['code' => 'old000000000', 'number' => 'INV-0041', 'status' => 'void']]);
+
+        $response = $this->handler($order, superseded: ['old000000000' => $order])->handle($payload, Signature::header($payload, self::LIVE_SECRET));
+
+        $this->assertSame(200, $response['status']);
+        $this->assertSame('pending', $order->status);
+        $this->assertSame([], $order->notes);
+    }
+
     public function test_a_charge_without_an_invoice_is_acknowledged_and_ignored(): void
     {
         $payload = self::payload('charge.paid', 'live', ['charge' => ['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'invoice' => null]]);
@@ -173,10 +233,12 @@ final class HandlerTest extends TestCase
 
     /**
      * Create a handler for a live-mode gateway holding one order, paid with invoice w7c2h5j9d3kx.
+     *
+     * @param  array<string, FakeOrder>  $superseded  Orders keyed by the code of an invoice they replaced.
      */
-    private function handler(FakeOrder $order): Handler
+    private function handler(FakeOrder $order, array $superseded = []): Handler
     {
-        return new Handler(new FakeOrders(['w7c2h5j9d3kx' => $order]), new StatusSync, 'live', [self::LIVE_SECRET, self::TEST_SECRET]);
+        return new Handler(new FakeOrders(['w7c2h5j9d3kx' => $order], $superseded), new StatusSync, 'live', [self::LIVE_SECRET, self::TEST_SECRET]);
     }
 
     /**

@@ -9,6 +9,7 @@ All notable changes to this plugin are documented here. It follows [Semantic Ver
 - Paying again for an order whose invoice was voided, or whose total changed and changed back, no longer sends the customer to the voided invoice: each new invoice is created under a key of its own rather than one a replay could answer with an old invoice.
 - An outdated invoice that already has a payment on its way is kept, with a note, instead of being replaced by one the payment would never reach; one that cannot be voided for another reason stops the checkout rather than staying payable beside the new one.
 - The same checkout submitted twice waits for the first request's invoice instead of creating a second one.
+- An order remembers the invoices it replaced. A payment that still reaches one, after it was voided, is no longer ignored: a paid replaced invoice puts the order on hold (or, on an order already paid, notes that the customer paid twice), and a payment detected, short or late on one is noted.
 
 ## 0.1.0 - 2026-10-13
 
