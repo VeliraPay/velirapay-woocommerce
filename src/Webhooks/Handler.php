@@ -73,9 +73,15 @@ final class Handler
         }
 
         $order = $this->orders->findByInvoiceCode($code);
+        $superseded = false;
+
+        if ($order === null) {
+            $order = $this->orders->findBySupersededInvoiceCode($code);
+            $superseded = $order !== null;
+        }
 
         // Acknowledged rather than refused: VeliraPay retries a refusal and switches the endpoint off after repeated ones,
-        // and an invoice made outside the store, or one an order has outgrown, is no error.
+        // and an invoice made outside the store is no error.
         if ($order === null) {
             return self::answer(200, sprintf('Ignored: no order in this store uses invoice %s.', $code));
         }
@@ -87,13 +93,17 @@ final class Handler
             return self::answer(200, 'Already handled.');
         }
 
-        $this->sync->applyEvent($order, $event, $data);
+        if ($superseded) {
+            $this->sync->applySupersededEvent($order, $event, $data);
+        } else {
+            $this->sync->applyEvent($order, $event, $data);
+        }
 
         if ($eventId !== null) {
             $order->rememberEvent($eventId);
         }
 
-        return self::answer(200, sprintf('Handled %s for invoice %s.', $event, $code));
+        return self::answer(200, sprintf($superseded ? 'Handled %s for invoice %s, which the order has replaced.' : 'Handled %s for invoice %s.', $event, $code));
     }
 
     /**
