@@ -31,9 +31,9 @@ final class FakeOrder implements Order
     public ?string $transactionId = null;
 
     /**
-     * Create an order in a status.
+     * Create an order in a status, for a total.
      */
-    public function __construct(public string $status = 'pending') {}
+    public function __construct(public string $status = 'pending', public string $total = '49.90', public string $currency = 'EUR') {}
 
     /**
      * {@inheritDoc}
@@ -41,6 +41,22 @@ final class FakeOrder implements Order
     public function status(): string
     {
         return $this->status;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function total(): string
+    {
+        return $this->total;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function currency(): string
+    {
+        return $this->currency;
     }
 
     /**

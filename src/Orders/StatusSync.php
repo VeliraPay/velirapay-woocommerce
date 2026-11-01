@@ -103,24 +103,42 @@ final class StatusSync
     public function applyInvoice(Order $order, array $invoice): void
     {
         match ($invoice['status'] ?? null) {
-            'paid' => $this->markPaid($order, $invoice),
+            'paid' => $this->markPaid($order, $invoice, polled: true),
             'void' => $this->cancel($order, __('The VeliraPay invoice was voided and can no longer be paid.', 'velirapay-woocommerce')),
             default => $this->holdIfUnderpaid($order, $invoice),
         };
     }
 
     /**
-     * Record the payment with the charge that paid the invoice, once.
+     * Record the payment with the charge that paid the invoice, once, or hold the order when the invoice no longer covers it.
      *
      * @param  array<array-key, mixed>  $invoice
+     * @param  bool  $polled  Whether the invoice was polled, so a hold already noted is not noted again on every poll.
      */
-    private function markPaid(Order $order, array $invoice): void
+    private function markPaid(Order $order, array $invoice, bool $polled = false): void
     {
         if ($order->isPaid()) {
             return;
         }
 
         $charge = self::chargeWithStatus($invoice, 'paid');
+
+        if (! self::covers($invoice, $order)) {
+            if ($polled && $order->status() === 'on-hold') {
+                return;
+            }
+
+            $this->hold($order, sprintf(
+                /* translators: 1: invoice number, 2: charge code, 3: invoice amount and currency, 4: order total and currency */
+                __('VeliraPay invoice %1$s was paid (charge %2$s), but it was for %3$s and the order now comes to %4$s, so it was not marked paid. Check the payment before fulfilling the order.', 'velirapay-woocommerce'),
+                self::text($invoice['number'] ?? null),
+                $charge,
+                trim(self::money($invoice['amount'] ?? null).' '.self::text($invoice['currency'] ?? null)),
+                trim(self::money($order->total()).' '.$order->currency()),
+            ));
+
+            return;
+        }
 
         $order->markPaid($charge, sprintf(
             /* translators: 1: invoice number, 2: charge code */
@@ -176,6 +194,28 @@ final class StatusSync
             __('Charge %s is underpaid. Check it in the VeliraPay dashboard.', 'velirapay-woocommerce'),
             $charge,
         ));
+    }
+
+    /**
+     * Determine if the invoice was for what the order comes to now, in the order's currency.
+     *
+     * @param  array<array-key, mixed>  $invoice
+     */
+    private static function covers(array $invoice, Order $order): bool
+    {
+        $amount = self::money($invoice['amount'] ?? null);
+
+        return $amount !== ''
+            && $amount === self::money($order->total())
+            && strtoupper(self::text($invoice['currency'] ?? null)) === strtoupper($order->currency());
+    }
+
+    /**
+     * Get a fiat amount with two decimals, such as "49.90", or an empty string when it is not a number.
+     */
+    private static function money(mixed $value): string
+    {
+        return is_numeric($value) ? number_format((float) $value, 2, '.', '') : '';
     }
 
     /**

@@ -24,6 +24,8 @@ final class HandlerTest extends TestCase
             'code' => 'w7c2h5j9d3kx',
             'number' => 'INV-0042',
             'status' => 'paid',
+            'amount' => '49.90',
+            'currency' => 'EUR',
             'charges' => [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']],
         ]]);
 
@@ -65,7 +67,7 @@ final class HandlerTest extends TestCase
     public function test_a_delivery_signed_with_the_other_modes_secret_is_still_verified(): void
     {
         $order = new FakeOrder('pending');
-        $payload = self::payload('invoice.paid', 'live', ['invoice' => ['code' => 'w7c2h5j9d3kx', 'status' => 'paid']]);
+        $payload = self::payload('invoice.paid', 'live', ['invoice' => ['code' => 'w7c2h5j9d3kx', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR']]);
 
         $response = $this->handler($order)->handle($payload, Signature::header($payload, self::TEST_SECRET));
 

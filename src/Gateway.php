@@ -314,8 +314,8 @@ final class Gateway extends WC_Payment_Gateway
                 return $existing;
             }
 
-            if ($status === 'open') {
-                $this->voidQuietly($client, $code);
+            if ($status === 'open' && ! $this->voidOutdated($client, $order, $code)) {
+                return $existing;
             }
         }
 
@@ -335,18 +335,10 @@ final class Gateway extends WC_Payment_Gateway
             'send_email' => false,
         ];
 
-        $key = sprintf('woocommerce-order-%d-%s', $order->get_id(), $order->get_order_key());
+        // Keyed by the invoice it replaces as well as its details, so a replay can never hand back an invoice voided since.
+        $key = sprintf('woocommerce-order-%d-%s-%s', $order->get_id(), $order->get_order_key(), substr(sha1($code."\n".(string) json_encode($params)), 0, 16));
 
-        try {
-            $invoice = $client->createInvoice($params, $key);
-        } catch (ApiException $exception) {
-            if (! $exception->isConflict()) {
-                throw $exception;
-            }
-
-            // The key was first used for this order with other details, so it needs a key of its own.
-            $invoice = $client->createInvoice($params, $key.'-'.substr(sha1((string) json_encode($params)), 0, 8));
-        }
+        $invoice = $this->createInvoice($client, $params, $key);
 
         WooCommerceOrder::rememberInvoice($order, $invoice);
 
@@ -381,15 +373,53 @@ final class Gateway extends WC_Payment_Gateway
     }
 
     /**
-     * Void an invoice the order has outgrown, without letting a failure stop the new one.
+     * Create the invoice, waiting out the same checkout submitted twice, whose first request still holds the key.
+     *
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     *
+     * @throws ApiException
      */
-    private function voidQuietly(Client $client, string $code): void
+    private function createInvoice(Client $client, array $params, string $key): array
+    {
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                return $client->createInvoice($params, $key);
+            } catch (ApiException $exception) {
+                if (! $exception->isConflict() || $attempt >= 3) {
+                    throw $exception;
+                }
+
+                sleep(1);
+            }
+        }
+    }
+
+    /**
+     * Void an invoice the order has outgrown, returning false when it must be kept because a payment to it is on its way.
+     *
+     * @throws ApiException when it could not be voided for another reason, so it is not left payable beside a new one.
+     */
+    private function voidOutdated(Client $client, WC_Order $order, string $code): bool
     {
         try {
             $client->voidInvoice($code);
+
+            return true;
         } catch (ApiException $exception) {
-            wc_get_logger()->warning(sprintf('Could not void the outdated invoice %s: %s', $code, $exception->getMessage()), ['source' => Plugin::LOG_SOURCE]);
+            if (! $exception->isConflict()) {
+                throw $exception;
+            }
         }
+
+        $order->add_order_note(sprintf(
+            /* translators: 1: invoice code, 2: order total and currency */
+            __('The order now comes to %2$s, but VeliraPay invoice %1$s already has a payment on its way, so it was kept rather than replaced. Check the amount once it is paid.', 'velirapay-woocommerce'),
+            $code,
+            wc_format_decimal($order->get_total(), 2).' '.$order->get_currency(),
+        ));
+
+        return false;
     }
 
     /**
