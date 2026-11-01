@@ -36,6 +36,51 @@ final class StatusSyncTest extends TestCase
         $this->assertSame([], $order->notes);
     }
 
+    public function test_a_paid_invoice_for_less_than_the_order_now_comes_to_holds_it(): void
+    {
+        $order = new FakeOrder('pending', total: '64.90');
+
+        (new StatusSync)->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [
+            ['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC'],
+        ])]);
+
+        $this->assertSame('on-hold', $order->status);
+        $this->assertNull($order->transactionId);
+        $this->assertSame(['VeliraPay invoice INV-0042 was paid (charge z8x6c4v2b0nm), but it was for 49.90 EUR and the order now comes to 64.90 EUR, so it was not marked paid. Check the payment before fulfilling the order.'], $order->notes);
+    }
+
+    public function test_a_paid_invoice_in_another_currency_holds_the_order(): void
+    {
+        $order = new FakeOrder('pending', currency: 'USD');
+
+        (new StatusSync)->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid')]);
+
+        $this->assertSame('on-hold', $order->status);
+        $this->assertNull($order->transactionId);
+    }
+
+    public function test_a_paid_invoice_matches_a_total_however_it_is_written(): void
+    {
+        $order = new FakeOrder('pending', total: '49.9');
+
+        (new StatusSync)->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid')]);
+
+        $this->assertSame('processing', $order->status);
+    }
+
+    public function test_polling_a_paid_invoice_that_no_longer_covers_the_order_notes_it_once(): void
+    {
+        $order = new FakeOrder('pending', total: '64.90');
+        $invoice = self::invoice('paid', [['id' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']]);
+
+        (new StatusSync)->applyInvoice($order, $invoice);
+        (new StatusSync)->applyInvoice($order, $invoice);
+
+        $this->assertSame('on-hold', $order->status);
+        $this->assertNull($order->transactionId);
+        $this->assertCount(1, $order->notes);
+    }
+
     public function test_a_voided_invoice_cancels_the_order(): void
     {
         $order = new FakeOrder('pending');

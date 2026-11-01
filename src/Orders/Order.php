@@ -20,6 +20,16 @@ interface Order
     public function isPaid(): bool;
 
     /**
+     * Get what the order comes to, such as "49.90".
+     */
+    public function total(): string;
+
+    /**
+     * Get the order's currency code, such as "EUR".
+     */
+    public function currency(): string;
+
+    /**
      * Record the payment, with the charge that made it as the transaction id, and move the order on.
      */
     public function markPaid(string $transactionId, string $note): void;

@@ -77,6 +77,22 @@ final class WooCommerceOrder implements Order
     /**
      * {@inheritDoc}
      */
+    public function total(): string
+    {
+        return (string) $this->order->get_total();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function currency(): string
+    {
+        return $this->order->get_currency();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     public function markPaid(string $transactionId, string $note): void
     {
         $this->order->add_order_note($note);
