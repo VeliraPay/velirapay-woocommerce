@@ -2,6 +2,10 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+- A `payout.sent` or `payout.confirmed` webhook adds a note saying your share of the charge went out or reached your wallet, on an endpoint subscribed to them. Neither changes the order, and they are not among the events the plugin asks you to tick.
+
 ## 0.2.0 - 2026-11-03
 
 - The webhook receiver answers the `webhook.verification` challenge VeliraPay now sends an endpoint when it is added or its URL changes, which it must answer before it receives anything else.

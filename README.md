@@ -80,6 +80,7 @@ The same mapping is applied whether the news comes from a webhook or from pollin
 | `charge.expired` | note | The rate lock ran out; the customer can get a new quote on the hosted page. |
 | `charge.late_payment` | note | Funds arrived after the charge expired or was canceled, to accept in the dashboard before any refund, or on top of a paid one, which is counted automatically. |
 | `charge.refunded` | note | A refund you recorded, with the total refunded so far. |
+| `payout.sent`, `payout.confirmed` | note | Your share of the charge went out, and reached your wallet. The plugin does not need them, so they are not among the events to tick. |
 | `charge.created`, `charge.paid`, `charge.canceled`, `invoice.viewed`, anything else | note | |
 
 A paid invoice sends both `charge.paid` and `invoice.paid`; only `invoice.paid` completes the order, so the order is fulfilled once.

@@ -20,6 +20,7 @@ final class StatusSync
         $invoice = is_array($data['invoice'] ?? null) ? $data['invoice'] : [];
         $charge = is_array($data['charge'] ?? null) ? $data['charge'] : [];
         $transfer = is_array($data['transaction'] ?? null) ? $data['transaction'] : [];
+        $payout = is_array($data['payout'] ?? null) ? $data['payout'] : [];
 
         $code = self::text($charge['code'] ?? null);
         $asset = self::text($charge['asset'] ?? null);
@@ -85,6 +86,21 @@ final class StatusSync
                 __('A refund was recorded on charge %1$s: %2$s %3$s refunded in total.', 'velirapay-woocommerce'),
                 $code,
                 self::amount($charge['refunded_amount'] ?? null),
+                $asset,
+            )),
+            'payout.sent' => $order->addNote(sprintf(
+                /* translators: 1: charge code, 2: amount, 3: coin, 4: transaction hash */
+                __('Your share of charge %1$s is on its way: %2$s %3$s in transaction %4$s.', 'velirapay-woocommerce'),
+                $code,
+                self::amount($payout['sent_amount'] ?? null),
+                $asset,
+                self::text($payout['payout_txid'] ?? null),
+            )),
+            'payout.confirmed' => $order->addNote(sprintf(
+                /* translators: 1: charge code, 2: amount, 3: coin */
+                __('Your share of charge %1$s has reached your wallet: %2$s %3$s.', 'velirapay-woocommerce'),
+                $code,
+                self::amount($payout['sent_amount'] ?? null),
                 $asset,
             )),
             default => $order->addNote(sprintf(

@@ -175,6 +175,8 @@ final class StatusSyncTest extends TestCase
         yield 'charge.late_payment' => ['charge.late_payment', ['charge' => self::charge('expired'), 'transaction' => ['amount' => '0.001000000000000000']], 'A late payment of 0.001 BTC arrived on charge k3v9x2m7q8wz. Accept it in the VeliraPay dashboard; refund it from your wallet after accepting.'];
         yield 'charge.late_payment on a paid charge' => ['charge.late_payment', ['charge' => self::charge('paid'), 'transaction' => ['amount' => '0.001000000000000000']], 'An additional payment of 0.001 BTC arrived on charge k3v9x2m7q8wz; it is added to the charge once confirmed.'];
         yield 'charge.refunded' => ['charge.refunded', ['charge' => self::charge('paid', ['refunded_amount' => '0.000500000000000000'])], 'A refund was recorded on charge k3v9x2m7q8wz: 0.0005 BTC refunded in total.'];
+        yield 'payout.sent' => ['payout.sent', ['charge' => self::charge('paid'), 'payout' => ['sent_amount' => '0.002425', 'payout_txid' => 'cc9a3e0b']], 'Your share of charge k3v9x2m7q8wz is on its way: 0.002425 BTC in transaction cc9a3e0b.'];
+        yield 'payout.confirmed' => ['payout.confirmed', ['charge' => self::charge('paid'), 'payout' => ['sent_amount' => '0.002425', 'payout_txid' => 'cc9a3e0b']], 'Your share of charge k3v9x2m7q8wz has reached your wallet: 0.002425 BTC.'];
         yield 'invoice.created' => ['invoice.created', ['invoice' => self::invoice('open')], 'VeliraPay event invoice.created received.'];
         yield 'invoice.sent' => ['invoice.sent', ['invoice' => self::invoice('open')], 'VeliraPay event invoice.sent received.'];
         yield 'invoice.viewed' => ['invoice.viewed', ['invoice' => self::invoice('open')], 'The customer opened the VeliraPay invoice.'];
