@@ -40,10 +40,13 @@ bin/build.sh
 3. Copy the **Webhook URL** shown on that page, `https://your-store.example/?wc-api=velirapay` or `https://your-store.example/wc-api/velirapay/` depending on your permalinks. In the dashboard, under **Developers → Webhooks**, add an endpoint with it and tick `invoice.paid`, `invoice.voided`, `charge.payment_detected`, `charge.underpaid`, `charge.expired`, `charge.late_payment` and `charge.refunded`. Ticking every event works too: the rest only add notes.
 4. Paste the endpoint's signing secret (`whsec_…`) into the matching webhook secret field.
 5. Enable the gateway and save.
+6. Back on the endpoint's page in the dashboard, press **Verify**. The plugin answers the challenge VeliraPay sends, and the endpoint receives nothing until it has.
 
 Each mode has its own keys and endpoints, so do the dashboard steps once in live mode and once in test mode. The settings page shows a notice when the gateway is enabled without a key for its mode, or when the store currency is not one VeliraPay bills in; in both cases the method is not offered at checkout.
 
 ## How orders map to invoices
+
+A store does not know which coin a customer wants to pay in, and a charge needs its coin up front, so an order becomes an invoice, whose hosted page lets the customer pick. USDT and USDC on Ethereum start at 10 of the token, so a smaller order simply does not offer them there.
 
 When the customer chooses VeliraPay, the plugin creates an invoice with `POST /v1/invoices`:
 

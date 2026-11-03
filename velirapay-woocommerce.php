@@ -4,7 +4,7 @@
  * Plugin Name: VeliraPay for WooCommerce
  * Plugin URI: https://github.com/VeliraPay/velirapay-woocommerce
  * Description: Take Bitcoin, Ethereum, USDC and other coins at checkout with VeliraPay. Each order becomes a VeliraPay invoice the customer pays on a hosted page.
- * Version: 0.1.0
+ * Version: 0.2.0
  * Author: VeliraPay
  * Author URI: https://velirapay.com
  * Text Domain: velirapay-woocommerce

@@ -2,7 +2,7 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## 0.2.0 - 2026-11-03
 
 - The webhook receiver answers the `webhook.verification` challenge VeliraPay now sends an endpoint when it is added or its URL changes, which it must answer before it receives anything else.
 - A paid invoice only completes an order it still covers: one for a different amount or currency than the order now comes to, after the order was edited, puts it on hold with a note instead of marking it paid.

@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.3
 WC tested up to: 11.2
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -44,6 +44,10 @@ Live and test mode each need their own key and endpoint: switch the dashboard to
 
 USD, EUR, GBP, CAD, AUD, CHF and TRY. With any other store currency the gateway is not offered at checkout and a notice says so.
 
+= Which coins can customers pay in? =
+
+Every coin your VeliraPay account takes, which needs a payout address for its network under Payment settings in the dashboard. USDT and USDC on Ethereum start at 10 of the token, so a smaller order simply does not offer them. See https://velirapay.com/docs/assets for the list.
+
 = What happens to the order while the customer pays? =
 
 It stays "Pending payment" with the invoice's number and link in its notes. When a payment is seen on chain it goes "On hold", and when the payment confirms it goes "Processing" or "Completed", as any paid order would. If the customer never pays, it stays pending; WooCommerce's "Hold stock" setting cancels pending orders after the minutes you set, which also voids the invoice.
@@ -65,6 +69,12 @@ Yes. Turn on test mode and use a test API key and a test endpoint: payments then
 By hand. Send the coins back from your wallet and record the refund in the VeliraPay dashboard; the plugin adds a note to the order.
 
 == Changelog ==
+
+= 0.2.0 =
+* The webhook receiver answers the verification challenge an endpoint has to pass before it receives anything.
+* A paid invoice only completes an order it still covers; one for a different amount or currency puts the order on hold with a note.
+* Paying again for an order whose invoice was voided or outdated no longer reaches that invoice, and an outdated invoice with a payment on its way is kept rather than replaced.
+* A payment that reaches an invoice the order replaced is noted, and puts the order on hold.
 
 = 0.1.0 =
 * First release: the payment method, the webhook receiver, the status sync and the settings page.
