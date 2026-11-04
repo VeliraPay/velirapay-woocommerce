@@ -2,7 +2,7 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## 0.3.0 - 2026-11-04
 
 - A `payout.sent` or `payout.confirmed` webhook adds a note saying your share of the charge went out or reached your wallet, on an endpoint subscribed to them. Neither changes the order, and they are not among the events the plugin asks you to tick.
 

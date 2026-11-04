@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.3
 WC tested up to: 11.2
-Stable tag: 0.2.0
+Stable tag: 0.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -69,6 +69,9 @@ Yes. Turn on test mode and use a test API key and a test endpoint: payments then
 By hand. Send the coins back from your wallet and record the refund in the VeliraPay dashboard; the plugin adds a note to the order.
 
 == Changelog ==
+
+= 0.3.0 =
+* A payout.sent or payout.confirmed webhook adds a note saying your share of the charge went out or reached your wallet, on an endpoint subscribed to them.
 
 = 0.2.0 =
 * The webhook receiver answers the verification challenge an endpoint has to pass before it receives anything.
