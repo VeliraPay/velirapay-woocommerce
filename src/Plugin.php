@@ -32,6 +32,16 @@ final class Plugin
     public const SYNC_HOOK = 'velirapay_sync_pending_orders';
 
     /**
+     * The WP-Cron hook that continues a pending-order snapshot.
+     */
+    public const SYNC_BATCH_HOOK = 'velirapay_sync_order_batch';
+
+    /**
+     * The option holding the remaining order IDs in the snapshot.
+     */
+    private const SYNC_QUEUE_OPTION = 'velirapay_sync_order_ids';
+
+    /**
      * The order action that polls one order from its edit screen.
      */
     public const CHECK_STATUS_ACTION = 'velirapay_check_status';
@@ -95,6 +105,7 @@ final class Plugin
         add_action('template_redirect', [self::class, 'syncOnOrderReceivedPage'], 10);
         add_action('init', [self::class, 'scheduleSync']);
         add_action(self::SYNC_HOOK, [self::class, 'syncPendingOrders']);
+        add_action(self::SYNC_BATCH_HOOK, [self::class, 'syncOrderBatch']);
         add_action('admin_notices', [self::class, 'configurationNotices']);
     }
 
@@ -104,6 +115,8 @@ final class Plugin
     public static function deactivate(): void
     {
         wp_clear_scheduled_hook(self::SYNC_HOOK);
+        wp_clear_scheduled_hook(self::SYNC_BATCH_HOOK);
+        delete_option(self::SYNC_QUEUE_OPTION);
     }
 
     /**
@@ -269,22 +282,53 @@ final class Plugin
      */
     public static function syncPendingOrders(): void
     {
-        if (self::gateway()->client() === null) {
+        if (self::gateway()->client() === null || wp_next_scheduled(self::SYNC_BATCH_HOOK) !== false) {
             return;
         }
 
-        $orders = wc_get_orders([
-            'limit' => 50,
-            'payment_method' => Gateway::ID,
-            'status' => ['pending', 'on-hold'],
-            'date_created' => '>'.(time() - self::SYNC_DAYS * DAY_IN_SECONDS),
-        ]);
+        if (get_option(self::SYNC_QUEUE_OPTION, []) === []) {
+            $orderIds = wc_get_orders([
+                'limit' => -1,
+                'return' => 'ids',
+                'orderby' => 'ID',
+                'order' => 'ASC',
+                'payment_method' => Gateway::ID,
+                'status' => ['pending', 'on-hold'],
+                'date_created' => '>'.(time() - self::SYNC_DAYS * DAY_IN_SECONDS),
+            ]);
 
-        foreach (is_array($orders) ? $orders : [] as $order) {
-            if (WooCommerceOrder::invoiceCodeOf($order) !== '') {
+            update_option(self::SYNC_QUEUE_OPTION, is_array($orderIds) ? $orderIds : [], false);
+        }
+
+        self::syncOrderBatch();
+    }
+
+    /**
+     * Poll at most fifty orders, spacing continuations by a minute to leave room under the API limit.
+     */
+    public static function syncOrderBatch(): void
+    {
+        $queued = get_option(self::SYNC_QUEUE_OPTION, []);
+        $orderIds = is_array($queued) ? array_values(array_filter($queued, 'is_int')) : [];
+
+        foreach (array_slice($orderIds, 0, 50) as $orderId) {
+            $order = wc_get_order($orderId);
+
+            if ($order instanceof WC_Order && $order->get_payment_method() === Gateway::ID && $order->has_status(['pending', 'on-hold']) && WooCommerceOrder::invoiceCodeOf($order) !== '') {
                 self::sync($order);
             }
         }
+
+        $remaining = array_slice($orderIds, 50);
+
+        if ($remaining === []) {
+            delete_option(self::SYNC_QUEUE_OPTION);
+
+            return;
+        }
+
+        update_option(self::SYNC_QUEUE_OPTION, $remaining, false);
+        wp_schedule_single_event(time() + MINUTE_IN_SECONDS, self::SYNC_BATCH_HOOK);
     }
 
     /**

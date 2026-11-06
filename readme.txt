@@ -60,9 +60,13 @@ Cancelling an order voids its invoice, so the hosted page no longer takes paymen
 
 The plugin asks VeliraPay for the invoice's state when the customer opens the order-received page, when you choose "Check VeliraPay status" on the order's edit screen, and every hour for orders younger than three days that still wait for payment.
 
+Hourly polling works through every eligible order in batches of up to 50, at least a minute apart. WP-Cron needs site traffic or a server cron job to run the batches.
+
 = Can I test without real coins? =
 
 Yes. Turn on test mode and use a test API key and a test endpoint: payments then run on the test networks, and a test charge's page in the VeliraPay dashboard has a "Simulate payment" button.
+
+An order with an existing invoice keeps that invoice when you switch modes or accounts. To retry or check such an order, restore the original mode and account's API key; a live invoice is never replaced with a test invoice.
 
 = How are refunds handled? =
 

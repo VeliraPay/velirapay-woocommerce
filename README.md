@@ -58,7 +58,7 @@ When the customer chooses VeliraPay, the plugin creates an invoice with `POST /v
 | `memo` | `Order #1042 at Your Store`. |
 | `send_email` | `false`: the customer is sent straight to the hosted page, so no email is needed. |
 
-The request carries the idempotency key `woocommerce-order-<order id>-<order key>`, so a retried checkout gets the same invoice back rather than a second one. The invoice's code and hosted URL are kept in the order's meta (`_velirapay_invoice_code`, `_velirapay_invoice_url`) and noted on the order, the order stays **Pending payment**, and the customer is redirected to the hosted page. There they pick a coin, which locks the exchange rate for 30 minutes, and send the payment.
+The request carries the idempotency key `woocommerce-order-<order id>-<order key>-<hash>`, where the hash covers the invoice being replaced and the request details, so a retried checkout gets the same invoice back rather than a second one. The invoice's code and hosted URL are kept in the order's meta (`_velirapay_invoice_code`, `_velirapay_invoice_url`) and noted on the order, the order stays **Pending payment**, and the customer is redirected to the hosted page. There they pick a coin, which locks the exchange rate for 30 minutes, and send the payment.
 
 If the customer comes back to pay the same order again, the open invoice is reused while its amount and currency still match the order. When they no longer do, the old invoice is voided and a new one created, under an idempotency key of its own so a retry can never be answered with an invoice voided since. An old invoice VeliraPay will not void because a payment to it is on its way is kept instead, with a note, and any other failure to void stops the checkout so two invoices are never payable at once. The order remembers the codes of the invoices it replaced (`_velirapay_superseded_invoice_code`), so a payment that reaches one of them anyway is still matched to it.
 
@@ -85,6 +85,8 @@ The same mapping is applied whether the news comes from a webhook or from pollin
 
 A paid invoice sends both `charge.paid` and `invoice.paid`; only `invoice.paid` completes the order, so the order is fulfilled once.
 
+Refunded orders and orders with a recorded payment date keep their status when delayed events arrive, including when the merchant moved a paid order to a custom status or cancelled it afterward.
+
 ## Webhooks
 
 The receiver listens at the WooCommerce API URL, `wc-api=velirapay`, and handles each delivery as follows:
@@ -106,9 +108,11 @@ A webhook can be missed: the site was down, the endpoint was mistyped, or the se
 - when you choose **Check VeliraPay status** under Order actions on the order's edit screen, which also notes the invoice's current state,
 - every hour, through WP-Cron, for orders paid with VeliraPay that are younger than three days and still pending or on hold. Three days is how long VeliraPay keeps retrying a delivery.
 
+Hourly polling snapshots the eligible order IDs and checks up to 50 at a time, with remaining batches scheduled at least a minute apart. Orders already paid or removed before their batch runs are skipped. This keeps older pending orders in the polling queue while leaving room under the API's per-key rate limit; WP-Cron needs traffic or a server cron job to run the batches.
+
 ## Test mode
 
-Tick **Test mode** in the settings to use the test API key and have test deliveries, rather than live ones, act on orders. Test payments run on each chain's test network and move no real funds; a test charge's page in the dashboard has a **Simulate payment** button when no test coins are at hand. The two modes share nothing, so an invoice created in one is unknown to the other: switching modes while orders wait for payment leaves those orders to be paid in the mode they were created in.
+Tick **Test mode** in the settings to use the test API key and have test deliveries, rather than live ones, act on orders. Test payments run on each chain's test network and move no real funds; a test charge's page in the dashboard has a **Simulate payment** button when no test coins are at hand. The two modes share nothing, so an invoice created in one is unknown to the other: switching modes while orders wait for payment leaves those orders to be paid in the mode they were created in. Retrying such an order fails until the original mode and account's key are restored; it never replaces a live invoice with a test invoice. Restore the original settings and use **Check VeliraPay status** to synchronize an order paid while its mode was inactive.
 
 ## Refunds
 

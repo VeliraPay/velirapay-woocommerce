@@ -134,6 +134,7 @@ final class Gateway extends WC_Payment_Gateway
                 implode(', ', $events),
             ),
             __('Copy the endpoint\'s signing secret into the matching field below. Each mode has its own endpoint and secret.', 'velirapay-woocommerce'),
+            __('Save these settings, then press Verify on the endpoint in the VeliraPay dashboard. Deliveries start only after verification succeeds.', 'velirapay-woocommerce'),
         ];
 
         $html = '<tr valign="top"><th scope="row" class="titledesc"><label for="'.esc_attr($this->get_field_key($key)).'">'.esc_html($title).'</label></th>';
@@ -301,7 +302,7 @@ final class Gateway extends WC_Payment_Gateway
         $code = WooCommerceOrder::invoiceCodeOf($order);
 
         if ($code !== '') {
-            $existing = $this->existingInvoice($client, $code);
+            $existing = $client->retrieveInvoice($code);
             $status = $existing['status'] ?? null;
 
             if ($status === 'paid') {
@@ -350,26 +351,6 @@ final class Gateway extends WC_Payment_Gateway
         ));
 
         return $invoice;
-    }
-
-    /**
-     * Get the invoice created for the order earlier, or nothing when it belongs to the other mode.
-     *
-     * @return array<string, mixed>
-     *
-     * @throws ApiException
-     */
-    private function existingInvoice(Client $client, string $code): array
-    {
-        try {
-            return $client->retrieveInvoice($code);
-        } catch (ApiException $exception) {
-            if ($exception->isNotFound()) {
-                return [];
-            }
-
-            throw $exception;
-        }
     }
 
     /**

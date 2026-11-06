@@ -84,7 +84,7 @@ final class WooCommerceOrder implements Order
      */
     public function isPaid(): bool
     {
-        return $this->order->is_paid();
+        return $this->order->is_paid() || $this->order->get_date_paid() !== null || $this->order->has_status('refunded');
     }
 
     /**
