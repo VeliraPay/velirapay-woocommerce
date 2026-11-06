@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.3
 WC tested up to: 11.2
-Stable tag: 0.3.0
+Stable tag: 0.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -73,6 +73,12 @@ An order with an existing invoice keeps that invoice when you switch modes or ac
 By hand. Send the coins back from your wallet and record the refund in the VeliraPay dashboard; the plugin adds a note to the order.
 
 == Changelog ==
+
+= 0.3.1 =
+* Retrying an order after changing modes or accounts no longer replaces its existing invoice.
+* Delayed events leave refunded orders and orders with a recorded payment date alone.
+* Pending-order polling continues beyond fifty orders, in batches at least a minute apart.
+* The settings explain that an endpoint receives nothing until it is verified.
 
 = 0.3.0 =
 * A payout.sent or payout.confirmed webhook adds a note saying your share of the charge went out or reached your wallet, on an endpoint subscribed to them.

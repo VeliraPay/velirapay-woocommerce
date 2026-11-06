@@ -2,7 +2,7 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## 0.3.1 - 2026-11-06
 
 - Retrying an order after changing modes or accounts no longer replaces its existing invoice.
 - Delayed events preserve refunded orders and orders with a recorded payment date.
