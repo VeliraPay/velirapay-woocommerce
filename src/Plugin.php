@@ -160,11 +160,11 @@ final class Plugin
         }
 
         $paragraphs = [
-            __('When a customer pays with crypto, this store sends VeliraPay (velirapay.com), its crypto payment processor, the customer\'s billing name and email address, the order total and currency, and the order number, to create an invoice the customer then pays on VeliraPay\'s hosted page.', 'velirapay-woocommerce'),
-            __('In live mode, VeliraPay emails the customer, on the store\'s behalf, a receipt when the payment confirms, a notice when it falls short, and a notice of each refund recorded.', 'velirapay-woocommerce'),
+            __('When a customer pays with crypto, this store sends VeliraPay (velirapay.com), its crypto payment processor, the customer\'s billing name and email address, the order total and currency, and the order number, to create an invoice the customer then pays on VeliraPay\'s hosted page.', 'velirapay-for-woocommerce'),
+            __('In live mode, VeliraPay emails the customer, on the store\'s behalf, a receipt when the payment confirms, a notice when it falls short, and a notice of each refund recorded.', 'velirapay-for-woocommerce'),
             sprintf(
                 /* translators: %s: VeliraPay's privacy policy URL */
-                __('VeliraPay\'s privacy policy: %s', 'velirapay-woocommerce'),
+                __('VeliraPay\'s privacy policy: %s', 'velirapay-for-woocommerce'),
                 'https://velirapay.com/privacy',
             ),
         ];
@@ -360,7 +360,7 @@ final class Plugin
         $order = $order instanceof WC_Order ? $order : ($GLOBALS['theorder'] ?? null);
 
         if ($order instanceof WC_Order && $order->get_payment_method() === Gateway::ID && WooCommerceOrder::invoiceCodeOf($order) !== '') {
-            $actions[self::CHECK_STATUS_ACTION] = __('Check VeliraPay status', 'velirapay-woocommerce');
+            $actions[self::CHECK_STATUS_ACTION] = __('Check VeliraPay status', 'velirapay-for-woocommerce');
         }
 
         return $actions;
@@ -378,14 +378,14 @@ final class Plugin
         $invoice = self::sync($order);
 
         if ($invoice === null) {
-            $order->add_order_note(__('VeliraPay could not be asked about the invoice. Check the API key in the gateway settings and WooCommerce → Status → Logs.', 'velirapay-woocommerce'));
+            $order->add_order_note(__('VeliraPay could not be asked about the invoice. Check the API key in the gateway settings and WooCommerce → Status → Logs.', 'velirapay-for-woocommerce'));
 
             return;
         }
 
         $order->add_order_note(sprintf(
             /* translators: 1: invoice number, 2: invoice status */
-            __('VeliraPay invoice %1$s checked: it is %2$s.', 'velirapay-woocommerce'),
+            __('VeliraPay invoice %1$s checked: it is %2$s.', 'velirapay-for-woocommerce'),
             is_scalar($invoice['number'] ?? null) ? (string) $invoice['number'] : '',
             is_scalar($invoice['status'] ?? null) ? (string) $invoice['status'] : '',
         ));
@@ -493,7 +493,7 @@ final class Plugin
         if (! in_array($currency, Gateway::CURRENCIES, true)) {
             self::notice(sprintf(
                 /* translators: 1: store currency, 2: supported currencies */
-                __('VeliraPay cannot take payments in %1$s, so it is not offered at checkout. It supports %2$s; the store currency is under WooCommerce → Settings → General.', 'velirapay-woocommerce'),
+                __('VeliraPay cannot take payments in %1$s, so it is not offered at checkout. It supports %2$s; the store currency is under WooCommerce → Settings → General.', 'velirapay-for-woocommerce'),
                 $currency,
                 implode(', ', Gateway::CURRENCIES),
             ));
@@ -502,7 +502,7 @@ final class Plugin
         if ($gateway->enabled === 'yes' && $gateway->apiKey() === '') {
             self::notice(sprintf(
                 /* translators: 1: "live" or "test", 2: settings page URL */
-                __('VeliraPay is enabled but has no %1$s API key, so it is not offered at checkout. <a href="%2$s">Add one in its settings</a>.', 'velirapay-woocommerce'),
+                __('VeliraPay is enabled but has no %1$s API key, so it is not offered at checkout. <a href="%2$s">Add one in its settings</a>.', 'velirapay-for-woocommerce'),
                 $gateway->mode(),
                 esc_url(admin_url('admin.php?page=wc-settings&tab=checkout&section='.Gateway::ID)),
             ));
@@ -511,7 +511,7 @@ final class Plugin
         if ($gateway->enabled === 'yes' && $gateway->takesNoCoin($currency)) {
             self::notice(sprintf(
                 /* translators: %s: "live" or "test" */
-                __('VeliraPay is not offered at checkout: your VeliraPay account takes no coin in %s mode yet. Add a payout address under Payment settings in the VeliraPay dashboard; the checkout asks again within ten minutes.', 'velirapay-woocommerce'),
+                __('VeliraPay is not offered at checkout: your VeliraPay account takes no coin in %s mode yet. Add a payout address under Payment settings in the VeliraPay dashboard; the checkout asks again within ten minutes.', 'velirapay-for-woocommerce'),
                 $gateway->mode(),
             ));
         }
@@ -529,7 +529,7 @@ final class Plugin
         foreach (array_unique($refusals) as $refusal) {
             self::notice(sprintf(
                 /* translators: 1: "live" or "test", 2: VeliraPay's message */
-                __('VeliraPay refused the %1$s API key: %2$s Check the key, its permissions and the addresses it may be used from under Developers → API keys in the VeliraPay dashboard.', 'velirapay-woocommerce'),
+                __('VeliraPay refused the %1$s API key: %2$s Check the key, its permissions and the addresses it may be used from under Developers → API keys in the VeliraPay dashboard.', 'velirapay-for-woocommerce'),
                 $gateway->mode(),
                 esc_html($refusal),
             ));
@@ -542,7 +542,7 @@ final class Plugin
     public static function missingWooCommerceNotice(): void
     {
         if (current_user_can('activate_plugins')) {
-            self::notice(__('VeliraPay for WooCommerce needs WooCommerce 8.3 or later to be installed and active.', 'velirapay-woocommerce'));
+            self::notice(__('VeliraPay for WooCommerce needs WooCommerce 8.3 or later to be installed and active.', 'velirapay-for-woocommerce'));
         }
     }
 
@@ -705,7 +705,7 @@ final class Plugin
 
         try {
             $client->voidInvoice($code);
-            self::noteVoid($order, $code, __('The VeliraPay invoice was voided; it can no longer be paid.', 'velirapay-woocommerce'));
+            self::noteVoid($order, $code, __('The VeliraPay invoice was voided; it can no longer be paid.', 'velirapay-for-woocommerce'));
 
             return;
         } catch (ApiException $exception) {
@@ -726,12 +726,12 @@ final class Plugin
             self::noteVoid($order, $code, $exception->isNotFound()
                 ? sprintf(
                     /* translators: %s: invoice code */
-                    __('VeliraPay invoice %s could not be voided with the current API key: it belongs to the other mode or another account. Void it in the VeliraPay dashboard.', 'velirapay-woocommerce'),
+                    __('VeliraPay invoice %s could not be voided with the current API key: it belongs to the other mode or another account. Void it in the VeliraPay dashboard.', 'velirapay-for-woocommerce'),
                     $code,
                 )
                 : sprintf(
                     /* translators: %s: error message */
-                    __('The VeliraPay invoice could not be voided: %s', 'velirapay-woocommerce'),
+                    __('The VeliraPay invoice could not be voided: %s', 'velirapay-for-woocommerce'),
                     $exception->getMessage(),
                 ));
         }
@@ -757,12 +757,12 @@ final class Plugin
         self::noteVoid($order, $code, $order instanceof WC_Order && $order->has_status('cancelled') && $order->get_date_paid() === null
             ? sprintf(
                 /* translators: %s: invoice code */
-                __('VeliraPay invoice %s could not be voided: a short payment, or one still confirming, keeps it payable. Check it in the VeliraPay dashboard, where a short payment has to be accepted before it can be refunded. Accepting a short payment brings this order back on hold, and a payment that completes the invoice brings it back to Processing; WooCommerce takes its stock again either way.', 'velirapay-woocommerce'),
+                __('VeliraPay invoice %s could not be voided: a short payment, or one still confirming, keeps it payable. Check it in the VeliraPay dashboard, where a short payment has to be accepted before it can be refunded. Accepting a short payment brings this order back on hold, and a payment that completes the invoice brings it back to Processing; WooCommerce takes its stock again either way.', 'velirapay-for-woocommerce'),
                 $code,
             )
             : sprintf(
                 /* translators: %s: invoice code */
-                __('VeliraPay invoice %s could not be voided: a short payment, or one still confirming, keeps it payable. Check it in the VeliraPay dashboard, where a short payment has to be accepted before it can be refunded.', 'velirapay-woocommerce'),
+                __('VeliraPay invoice %s could not be voided: a short payment, or one still confirming, keeps it payable. Check it in the VeliraPay dashboard, where a short payment has to be accepted before it can be refunded.', 'velirapay-for-woocommerce'),
                 $code,
             ));
     }

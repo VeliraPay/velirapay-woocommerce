@@ -9,7 +9,7 @@
   var createElement = wp.element.createElement;
   var decodeEntities = wp.htmlEntities.decodeEntities;
   var settings = wc.wcSettings.getSetting('velirapay_data', {});
-  var title = decodeEntities(settings.title || '') || wp.i18n.__('Crypto (VeliraPay)', 'velirapay-woocommerce');
+  var title = decodeEntities(settings.title || '') || wp.i18n.__('Crypto (VeliraPay)', 'velirapay-for-woocommerce');
   var description = decodeEntities(settings.description || '');
 
   function Label(props) {

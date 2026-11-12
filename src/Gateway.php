@@ -64,8 +64,8 @@ final class Gateway extends WC_Payment_Gateway
         $this->id = self::ID;
         $this->icon = Plugin::url('assets/icon.svg');
         $this->has_fields = false;
-        $this->method_title = __('VeliraPay', 'velirapay-woocommerce');
-        $this->method_description = __('Take Bitcoin, Ethereum, USDC and other coins. The customer picks a coin on VeliraPay\'s hosted invoice page and the order is marked paid once the payment confirms. Refunds are not automated: send the coins back from your own wallet and record the refund in the VeliraPay dashboard.', 'velirapay-woocommerce');
+        $this->method_title = __('VeliraPay', 'velirapay-for-woocommerce');
+        $this->method_description = __('Take Bitcoin, Ethereum, USDC and other coins. The customer picks a coin on VeliraPay\'s hosted invoice page and the order is marked paid once the payment confirms. Refunds are not automated: send the coins back from your own wallet and record the refund in the VeliraPay dashboard.', 'velirapay-for-woocommerce');
         $this->supports = ['products'];
 
         $this->init_form_fields();
@@ -86,55 +86,55 @@ final class Gateway extends WC_Payment_Gateway
     {
         $this->form_fields = [
             'enabled' => [
-                'title' => __('Enable/Disable', 'velirapay-woocommerce'),
+                'title' => __('Enable/Disable', 'velirapay-for-woocommerce'),
                 'type' => 'checkbox',
-                'label' => __('Enable VeliraPay', 'velirapay-woocommerce'),
+                'label' => __('Enable VeliraPay', 'velirapay-for-woocommerce'),
                 'default' => 'no',
             ],
             'title' => [
-                'title' => __('Title', 'velirapay-woocommerce'),
+                'title' => __('Title', 'velirapay-for-woocommerce'),
                 'type' => 'text',
-                'description' => __('What the customer sees at checkout.', 'velirapay-woocommerce'),
-                'default' => __('Crypto (VeliraPay)', 'velirapay-woocommerce'),
+                'description' => __('What the customer sees at checkout.', 'velirapay-for-woocommerce'),
+                'default' => __('Crypto (VeliraPay)', 'velirapay-for-woocommerce'),
                 'desc_tip' => true,
             ],
             'description' => [
-                'title' => __('Description', 'velirapay-woocommerce'),
+                'title' => __('Description', 'velirapay-for-woocommerce'),
                 'type' => 'textarea',
-                'description' => __('Shown under the title at checkout.', 'velirapay-woocommerce'),
-                'default' => __('Pay with Bitcoin, Ethereum, USDC or another coin. You will be sent to VeliraPay to pick a coin; the amount is then locked for 30 minutes while you pay. Crypto payments cannot be refunded automatically: contact us if you need one.', 'velirapay-woocommerce'),
+                'description' => __('Shown under the title at checkout.', 'velirapay-for-woocommerce'),
+                'default' => __('Pay with Bitcoin, Ethereum, USDC or another coin. You will be sent to VeliraPay to pick a coin; the amount is then locked for 30 minutes while you pay. Crypto payments cannot be refunded automatically: contact us if you need one.', 'velirapay-for-woocommerce'),
                 'desc_tip' => true,
             ],
             'testmode' => [
-                'title' => __('Test mode', 'velirapay-woocommerce'),
+                'title' => __('Test mode', 'velirapay-for-woocommerce'),
                 'type' => 'checkbox',
-                'label' => __('Use the test API key and test webhook secret', 'velirapay-woocommerce'),
-                'description' => __('Test mode runs on the test networks: no real coins move. Switch the VeliraPay dashboard to test mode to create a test key and a test endpoint.', 'velirapay-woocommerce'),
+                'label' => __('Use the test API key and test webhook secret', 'velirapay-for-woocommerce'),
+                'description' => __('Test mode runs on the test networks: no real coins move. Switch the VeliraPay dashboard to test mode to create a test key and a test endpoint.', 'velirapay-for-woocommerce'),
                 'default' => 'no',
             ],
             'live_api_key' => [
-                'title' => __('Live API key', 'velirapay-woocommerce'),
+                'title' => __('Live API key', 'velirapay-for-woocommerce'),
                 'type' => 'password',
-                'description' => __('Starts with vp_live_. Create one in the VeliraPay dashboard under Developers → API keys.', 'velirapay-woocommerce'),
+                'description' => __('Starts with vp_live_. Create one in the VeliraPay dashboard under Developers → API keys.', 'velirapay-for-woocommerce'),
             ],
             'test_api_key' => [
-                'title' => __('Test API key', 'velirapay-woocommerce'),
+                'title' => __('Test API key', 'velirapay-for-woocommerce'),
                 'type' => 'password',
-                'description' => __('Starts with vp_test_. Create one with the dashboard in test mode.', 'velirapay-woocommerce'),
+                'description' => __('Starts with vp_test_. Create one with the dashboard in test mode.', 'velirapay-for-woocommerce'),
             ],
             'webhook_url' => [
-                'title' => __('Webhook URL', 'velirapay-woocommerce'),
+                'title' => __('Webhook URL', 'velirapay-for-woocommerce'),
                 'type' => 'velirapay_webhook_url',
             ],
             'live_webhook_secret' => [
-                'title' => __('Live webhook secret', 'velirapay-woocommerce'),
+                'title' => __('Live webhook secret', 'velirapay-for-woocommerce'),
                 'type' => 'password',
-                'description' => __('The signing secret of your live endpoint, starting with whsec_. While you rotate it, list the old and the new one separated by a comma.', 'velirapay-woocommerce'),
+                'description' => __('The signing secret of your live endpoint, starting with whsec_. While you rotate it, list the old and the new one separated by a comma.', 'velirapay-for-woocommerce'),
             ],
             'test_webhook_secret' => [
-                'title' => __('Test webhook secret', 'velirapay-woocommerce'),
+                'title' => __('Test webhook secret', 'velirapay-for-woocommerce'),
                 'type' => 'password',
-                'description' => __('The signing secret of your test endpoint, starting with whsec_.', 'velirapay-woocommerce'),
+                'description' => __('The signing secret of your test endpoint, starting with whsec_.', 'velirapay-for-woocommerce'),
             ],
         ];
     }
@@ -150,14 +150,14 @@ final class Gateway extends WC_Payment_Gateway
         $events = ['invoice.paid', 'invoice.voided', 'charge.payment_detected', 'charge.underpaid', 'charge.expired', 'charge.late_payment', 'charge.refunded'];
 
         $steps = [
-            __('Switch the VeliraPay dashboard to the mode you are setting up, live or test, and open Developers → Webhooks.', 'velirapay-woocommerce'),
+            __('Switch the VeliraPay dashboard to the mode you are setting up, live or test, and open Developers → Webhooks.', 'velirapay-for-woocommerce'),
             sprintf(
                 /* translators: %s: event types */
-                __('Add an endpoint with the URL above and tick these events: %s.', 'velirapay-woocommerce'),
+                __('Add an endpoint with the URL above and tick these events: %s.', 'velirapay-for-woocommerce'),
                 implode(', ', $events),
             ),
-            __('Copy the endpoint\'s signing secret into the matching field below. Each mode has its own endpoint and secret.', 'velirapay-woocommerce'),
-            __('Save these settings, then press Verify on the endpoint in the VeliraPay dashboard. Deliveries start only after verification succeeds.', 'velirapay-woocommerce'),
+            __('Copy the endpoint\'s signing secret into the matching field below. Each mode has its own endpoint and secret.', 'velirapay-for-woocommerce'),
+            __('Save these settings, then press Verify on the endpoint in the VeliraPay dashboard. Deliveries start only after verification succeeds.', 'velirapay-for-woocommerce'),
         ];
 
         $html = '<tr valign="top"><th scope="row" class="titledesc"><label for="'.esc_attr($this->get_field_key($key)).'">'.esc_html($title).'</label></th>';
@@ -165,7 +165,7 @@ final class Gateway extends WC_Payment_Gateway
         $html .= '<input class="input-text regular-input" type="text" readonly id="'.esc_attr($this->get_field_key($key)).'" value="'.esc_attr($this->webhookUrl()).'" onfocus="this.select()" />';
 
         if (wp_parse_url(home_url(), PHP_URL_SCHEME) !== 'https') {
-            $html .= '<p class="description" style="color:#b32d2e">'.esc_html__('This site\'s address starts with http://. VeliraPay only sends webhooks to https:// addresses on port 443, so the site has to answer on HTTPS at the URL above, without redirecting.', 'velirapay-woocommerce').'</p>';
+            $html .= '<p class="description" style="color:#b32d2e">'.esc_html__('This site\'s address starts with http://. VeliraPay only sends webhooks to https:// addresses on port 443, so the site has to answer on HTTPS at the URL above, without redirecting.', 'velirapay-for-woocommerce').'</p>';
         }
 
         $html .= '<ol class="description" style="margin-top:8px">';
@@ -283,7 +283,7 @@ final class Gateway extends WC_Payment_Gateway
         $client = $this->client();
 
         if (! $order instanceof WC_Order || $client === null) {
-            wc_add_notice(__('This payment method is not set up yet. Please choose another one.', 'velirapay-woocommerce'), 'error');
+            wc_add_notice(__('This payment method is not set up yet. Please choose another one.', 'velirapay-for-woocommerce'), 'error');
 
             return ['result' => 'failure'];
         }
@@ -298,7 +298,7 @@ final class Gateway extends WC_Payment_Gateway
             wc_get_logger()->error(sprintf('Could not create an invoice for order #%s: %s', $order->get_order_number(), $exception->getMessage()), ['source' => Plugin::LOG_SOURCE]);
             $order->add_order_note(sprintf(
                 /* translators: %s: error message */
-                __('VeliraPay could not create an invoice: %s', 'velirapay-woocommerce'),
+                __('VeliraPay could not create an invoice: %s', 'velirapay-for-woocommerce'),
                 $exception->getMessage(),
             ));
             wc_add_notice(self::refusalNotice($exception), 'error');
@@ -516,7 +516,7 @@ final class Gateway extends WC_Payment_Gateway
 
         // Checked before an outdated invoice is voided, so the customer can add one and still pay it.
         if ($email === '') {
-            throw new InvalidArgumentException(__('an email address is needed to pay. Please enter your billing email address.', 'velirapay-woocommerce'));
+            throw new InvalidArgumentException(__('an email address is needed to pay. Please enter your billing email address.', 'velirapay-for-woocommerce'));
         }
 
         if ($existing !== null && $status === 'open' && ! $this->voidOutdated($client, $order, $code, $existing)) {
@@ -535,13 +535,13 @@ final class Gateway extends WC_Payment_Gateway
         $name = trim($order->get_formatted_billing_full_name());
 
         $params = [
-            'customer_name' => mb_substr($name !== '' ? $name : __('Customer', 'velirapay-woocommerce'), 0, 255),
+            'customer_name' => mb_substr($name !== '' ? $name : __('Customer', 'velirapay-for-woocommerce'), 0, 255),
             'customer_email' => $email,
             'amount' => $amount,
             'currency' => $currency,
             'memo' => mb_substr(sprintf(
                 /* translators: 1: order number, 2: store name */
-                __('Order #%1$s at %2$s', 'velirapay-woocommerce'),
+                __('Order #%1$s at %2$s', 'velirapay-for-woocommerce'),
                 $order->get_order_number(),
                 wp_specialchars_decode(get_bloginfo('name'), ENT_QUOTES),
             ), 0, 500),
@@ -558,7 +558,7 @@ final class Gateway extends WC_Payment_Gateway
 
         $order->add_order_note(sprintf(
             /* translators: 1: invoice number, 2: hosted page URL */
-            __('VeliraPay invoice %1$s created: %2$s', 'velirapay-woocommerce'),
+            __('VeliraPay invoice %1$s created: %2$s', 'velirapay-for-woocommerce'),
             is_scalar($invoice['number'] ?? null) ? (string) $invoice['number'] : '',
             is_scalar($invoice['hosted_url'] ?? null) ? (string) $invoice['hosted_url'] : '',
         ));
@@ -598,7 +598,7 @@ final class Gateway extends WC_Payment_Gateway
             }
         }
 
-        return __('The crypto payment could not be started. Please try again or choose another payment method.', 'velirapay-woocommerce');
+        return __('The crypto payment could not be started. Please try again or choose another payment method.', 'velirapay-for-woocommerce');
     }
 
     /**
@@ -608,7 +608,7 @@ final class Gateway extends WC_Payment_Gateway
     {
         return sprintf(
             /* translators: %s: what stopped the payment, such as "Mail cannot be delivered to this address." */
-            __('Crypto payment: %s', 'velirapay-woocommerce'),
+            __('Crypto payment: %s', 'velirapay-for-woocommerce'),
             esc_html($message),
         );
     }
@@ -664,7 +664,7 @@ final class Gateway extends WC_Payment_Gateway
 
         $order->add_order_note(sprintf(
             /* translators: 1: invoice code, 2: order total and currency */
-            __('The order now comes to %2$s, but VeliraPay invoice %1$s already has a payment on its way, so it was kept rather than replaced. Check the amount once it is paid.', 'velirapay-woocommerce'),
+            __('The order now comes to %2$s, but VeliraPay invoice %1$s already has a payment on its way, so it was kept rather than replaced. Check the amount once it is paid.', 'velirapay-for-woocommerce'),
             $code,
             wc_format_decimal($order->get_total(), 2).' '.$order->get_currency(),
         ));
@@ -709,7 +709,7 @@ final class Gateway extends WC_Payment_Gateway
 
             $this->settingsError(sprintf(
                 /* translators: 1: field name, 2: VeliraPay's message */
-                __('VeliraPay refused the %1$s: %2$s It was saved anyway; check it under Developers → API keys in the VeliraPay dashboard.', 'velirapay-woocommerce'),
+                __('VeliraPay refused the %1$s: %2$s It was saved anyway; check it under Developers → API keys in the VeliraPay dashboard.', 'velirapay-for-woocommerce'),
                 $this->fieldTitle($key),
                 $exception->getMessage(),
             ));
@@ -728,7 +728,7 @@ final class Gateway extends WC_Payment_Gateway
             if ($item !== '' && ! str_starts_with($item, $prefix)) {
                 $this->settingsError(sprintf(
                     /* translators: 1: field name, 2: expected prefix */
-                    __('%1$s was not saved: it must start with %2$s.', 'velirapay-woocommerce'),
+                    __('%1$s was not saved: it must start with %2$s.', 'velirapay-for-woocommerce'),
                     $this->fieldTitle($key),
                     $prefix,
                 ));

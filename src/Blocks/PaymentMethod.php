@@ -63,6 +63,7 @@ final class PaymentMethod extends AbstractPaymentMethodType
             Plugin::VERSION,
             true,
         );
+        wp_set_script_translations(self::SCRIPT_HANDLE, 'velirapay-for-woocommerce');
 
         return [self::SCRIPT_HANDLE];
     }

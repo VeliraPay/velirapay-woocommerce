@@ -7,7 +7,7 @@
  * Version: 0.3.1
  * Author: VeliraPay
  * Author URI: https://velirapay.com
- * Text Domain: velirapay-woocommerce
+ * Text Domain: velirapay-for-woocommerce
  * Requires at least: 6.4
  * Requires PHP: 8.1
  * Requires Plugins: woocommerce

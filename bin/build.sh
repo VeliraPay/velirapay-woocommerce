@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 #
-# Zip the files WordPress needs, and nothing else, as build/velirapay-woocommerce-<version>.zip.
+# Zip the files WordPress needs, and nothing else, as build/velirapay-for-woocommerce-<version>.zip, in a folder named
+# after the plugin's WordPress.org slug.
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+slug=velirapay-for-woocommerce
 version=$(sed -n 's/^ \* Version: *//p' velirapay-woocommerce.php | head -n 1)
 
 if [ -z "$version" ]; then
@@ -13,14 +15,14 @@ if [ -z "$version" ]; then
     exit 1
 fi
 
-rm -rf build/velirapay-woocommerce
-mkdir -p build/velirapay-woocommerce
+rm -rf "build/${slug}"
+mkdir -p "build/${slug}"
 
-cp velirapay-woocommerce.php readme.txt LICENSE CHANGELOG.md README.md build/velirapay-woocommerce/
-cp -R src assets build/velirapay-woocommerce/
+cp velirapay-woocommerce.php readme.txt LICENSE CHANGELOG.md README.md "build/${slug}/"
+cp -R src assets "build/${slug}/"
 
-(cd build && rm -f "velirapay-woocommerce-${version}.zip" && zip -rq "velirapay-woocommerce-${version}.zip" velirapay-woocommerce)
+(cd build && rm -f "${slug}-${version}.zip" && zip -rq "${slug}-${version}.zip" "${slug}")
 
-rm -rf build/velirapay-woocommerce
+rm -rf "build/${slug}"
 
-echo "build/velirapay-woocommerce-${version}.zip"
+echo "build/${slug}-${version}.zip"

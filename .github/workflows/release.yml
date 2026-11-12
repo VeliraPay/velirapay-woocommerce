@@ -84,4 +84,4 @@ jobs:
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" "build/velirapay-woocommerce-${GITHUB_REF_NAME#v}.zip" --repo "${GITHUB_REPOSITORY}" --verify-tag --title "${GITHUB_REF_NAME}" --notes-file "${RUNNER_TEMP}/notes.md"
+        run: gh release create "${GITHUB_REF_NAME}" "build/velirapay-for-woocommerce-${GITHUB_REF_NAME#v}.zip" --repo "${GITHUB_REPOSITORY}" --verify-tag --title "${GITHUB_REF_NAME}" --notes-file "${RUNNER_TEMP}/notes.md"
