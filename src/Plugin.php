@@ -84,6 +84,12 @@ final class Plugin
     private const REFUSAL_TRANSIENT = 'velirapay_key_refused_';
 
     /**
+     * The kinds of request a refusal is remembered for: reading invoices, creating or voiding them, and the requests that
+     * need no permission, the coins on offer and the account.
+     */
+    private const REFUSAL_KINDS = ['get', 'post', 'key'];
+
+    /**
      * The main plugin file.
      */
     private static string $file = '';
@@ -512,7 +518,7 @@ final class Plugin
 
         $refusals = [];
 
-        foreach (['get', 'post'] as $kind) {
+        foreach (self::REFUSAL_KINDS as $kind) {
             $refusal = get_transient(self::REFUSAL_TRANSIENT.$gateway->mode().'_'.$kind);
 
             if (is_string($refusal) && $gateway->apiKey() !== '') {
@@ -603,7 +609,7 @@ final class Plugin
             $answer = wp_remote_retrieve_body($response);
             $authorization = $headers['Authorization'] ?? '';
 
-            self::rememberRefusal($method, is_string($authorization) ? $authorization : '', $status, $answer);
+            self::rememberRefusal($method, $url, is_string($authorization) ? $authorization : '', $status, $answer);
 
             return ['status' => $status, 'body' => $answer];
         };
@@ -616,15 +622,18 @@ final class Plugin
      */
     public static function forgetRefusals(string $mode): void
     {
-        delete_transient(self::REFUSAL_TRANSIENT.$mode.'_get');
-        delete_transient(self::REFUSAL_TRANSIENT.$mode.'_post');
+        foreach (self::REFUSAL_KINDS as $kind) {
+            delete_transient(self::REFUSAL_TRANSIENT.$mode.'_'.$kind);
+        }
     }
 
     /**
-     * Remember a 401 or 403 VeliraPay answered a mode's key with, for the admin notices, until a request of the same
-     * kind succeeds: a key without invoices:write still reads invoices, so a read succeeding says nothing of the checkout.
+     * Remember a 401 or 403 VeliraPay answered a mode's key with, for the admin notices, until a request needing the same
+     * permission succeeds: a key without invoices:write still reads invoices, and one without invoices:read still lists
+     * the coins on offer. Any success ends a refusal of a request that needs no permission, since it shows the key is
+     * valid and may be used from the store's address.
      */
-    private static function rememberRefusal(string $method, string $authorization, int $status, string $body): void
+    private static function rememberRefusal(string $method, string $url, string $authorization, int $status, string $body): void
     {
         $mode = Client::modeOf(str_starts_with($authorization, 'Bearer ') ? substr($authorization, 7) : '');
 
@@ -632,15 +641,26 @@ final class Plugin
             return;
         }
 
-        $transient = self::REFUSAL_TRANSIENT.$mode.'_'.strtolower($method);
+        $kind = preg_match('~/v1/invoices(?:/|$)~', (string) parse_url($url, PHP_URL_PATH)) === 1 ? strtolower($method) : 'key';
+        $transient = self::REFUSAL_TRANSIENT.$mode.'_'.$kind;
 
         if ($status === 401 || $status === 403) {
             $decoded = json_decode($body, true);
             $message = is_array($decoded) && is_string($decoded['message'] ?? null) && $decoded['message'] !== '' ? $decoded['message'] : sprintf('HTTP %d', $status);
 
             set_transient($transient, $message, WEEK_IN_SECONDS);
-        } elseif ($status >= 200 && $status < 300 && get_transient($transient) !== false) {
-            delete_transient($transient);
+
+            return;
+        }
+
+        if ($status < 200 || $status >= 300) {
+            return;
+        }
+
+        foreach (array_unique([$transient, self::REFUSAL_TRANSIENT.$mode.'_key']) as $answered) {
+            if (get_transient($answered) !== false) {
+                delete_transient($answered);
+            }
         }
     }
 

@@ -315,6 +315,38 @@ final class PluginTest extends TestCase
         $this->assertStringNotContainsString('refused', $this->notices());
     }
 
+    public function test_a_refused_invoice_read_is_shown_while_the_coins_on_offer_are_listed(): void
+    {
+        $this->pendingOrder();
+        $client = new Client('vp_live_example', Plugin::httpTransport(), Plugin::userAgent());
+        $this->route([
+            'GET assets?currency=EUR' => [403, '{"message":"This API key may not be used from 203.0.113.9."}'],
+            'GET invoices/invoice1042' => [403, '{"message":"This API key does not have the invoices:read permission."}'],
+        ]);
+
+        foreach ([static fn () => $client->listAssets('EUR'), static fn () => $client->retrieveInvoice('invoice1042')] as $request) {
+            try {
+                $request();
+            } catch (ApiException) {
+            }
+        }
+
+        $this->assertStringContainsString('may not be used from 203.0.113.9.', $this->notices());
+        $this->assertStringContainsString('invoices:read', $this->notices());
+
+        // The checkout lists the coins every ten minutes, which needs no permission, so it only ends a refusal of the key.
+        $this->route(['GET assets?currency=EUR' => [200, '{"data":[{"id":"BTC","accepted":true,"minimum_price":"0.50"}]}']]);
+        $client->listAssets('EUR');
+
+        $this->assertStringNotContainsString('203.0.113.9', $this->notices());
+        $this->assertStringContainsString('invoices:read', $this->notices());
+
+        $this->route(['GET invoices/invoice1042' => [200, '{"data":{"id":"invoice1042","status":"open","charges":[]}}']]);
+        $client->retrieveInvoice('invoice1042');
+
+        $this->assertStringNotContainsString('refused', $this->notices());
+    }
+
     public function test_an_account_that_takes_no_coin_is_explained_when_checkout_found_so(): void
     {
         $this->pendingOrder();
