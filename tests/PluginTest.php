@@ -253,6 +253,20 @@ final class PluginTest extends TestCase
         $this->assertSame(['The VeliraPay invoice was voided; it can no longer be paid.'], array_column(wc_get_order_notes(['order_id' => 1042]), 'content'));
     }
 
+    public function test_the_privacy_policy_guide_says_what_is_sent_to_velirapay(): void
+    {
+        Plugin::addPrivacyPolicyContent();
+
+        $this->assertSame([[
+            'VeliraPay for WooCommerce',
+            '<p>When a customer pays with crypto, this store sends VeliraPay (velirapay.com), its crypto payment processor, the customer&#039;s billing name and email address, the order total and currency, and the order number, to create an invoice the customer then pays on VeliraPay&#039;s hosted page.</p>'
+            .'<p>In live mode, VeliraPay emails the customer, on the store&#039;s behalf, a receipt when the payment confirms, a notice when it falls short, and a notice of each refund recorded.</p>'
+            .'<p>VeliraPay&#039;s privacy policy: https://velirapay.com/privacy</p>',
+        ]], $GLOBALS['velirapay_test_privacy'] ?? null);
+
+        unset($GLOBALS['velirapay_test_privacy']);
+    }
+
     public function test_api_requests_never_follow_a_redirect_with_the_key(): void
     {
         $sent = [];

@@ -141,6 +141,29 @@ final class Plugin
         add_action(self::SYNC_HOOK, [self::class, 'syncPendingOrders']);
         add_action(self::SYNC_BATCH_HOOK, [self::class, 'syncOrderBatch']);
         add_action('admin_notices', [self::class, 'configurationNotices']);
+        add_action('admin_init', [self::class, 'addPrivacyPolicyContent']);
+    }
+
+    /**
+     * Suggest what the store's privacy policy should say about the plugin, under Settings → Privacy.
+     */
+    public static function addPrivacyPolicyContent(): void
+    {
+        if (! function_exists('wp_add_privacy_policy_content')) {
+            return;
+        }
+
+        $paragraphs = [
+            __('When a customer pays with crypto, this store sends VeliraPay (velirapay.com), its crypto payment processor, the customer\'s billing name and email address, the order total and currency, and the order number, to create an invoice the customer then pays on VeliraPay\'s hosted page.', 'velirapay-woocommerce'),
+            __('In live mode, VeliraPay emails the customer, on the store\'s behalf, a receipt when the payment confirms, a notice when it falls short, and a notice of each refund recorded.', 'velirapay-woocommerce'),
+            sprintf(
+                /* translators: %s: VeliraPay's privacy policy URL */
+                __('VeliraPay\'s privacy policy: %s', 'velirapay-woocommerce'),
+                'https://velirapay.com/privacy',
+            ),
+        ];
+
+        wp_add_privacy_policy_content('VeliraPay for WooCommerce', '<p>'.implode('</p><p>', array_map('esc_html', $paragraphs)).'</p>');
     }
 
     /**

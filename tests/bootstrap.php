@@ -618,6 +618,11 @@ function wp_unschedule_hook(string $hook): int
     return 1;
 }
 
+function wp_add_privacy_policy_content(string $pluginName, string $policyText): void
+{
+    $GLOBALS['velirapay_test_privacy'][] = [$pluginName, $policyText];
+}
+
 function get_post_type(int $postId): string|false
 {
     return isset($GLOBALS['velirapay_test_orders'][$postId]) ? 'shop_order' : false;

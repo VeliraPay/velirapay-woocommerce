@@ -14,6 +14,8 @@ The official WooCommerce plugin for [VeliraPay](https://velirapay.com), the cryp
 - [Polling](#polling)
 - [Test mode](#test-mode)
 - [Refunds](#refunds)
+- [Emails to customers](#emails-to-customers)
+- [Privacy and external services](#privacy-and-external-services)
 - [Development](#development)
 
 ## Requirements
@@ -60,7 +62,7 @@ When the customer chooses VeliraPay, the plugin creates an invoice with `POST /v
 | `currency` | The order's currency. |
 | `customer_name`, `customer_email` | The billing name and email. An order without a billing email, as one created in the admin may be, uses its customer's account email, and one with neither is refused at checkout before VeliraPay is asked. |
 | `memo` | `Order #1042 at Your Store`. |
-| `send_email` | `false`: the customer is sent straight to the hosted page, so no email is needed. |
+| `send_email` | `false`: the customer is sent straight to the hosted page, so the invoice itself is not emailed. This only governs the invoice email; see [Emails to customers](#emails-to-customers). |
 
 Every request to the API goes to `https://api.velirapay.com`, waits at most 15 seconds, and never follows a redirect, so the API key is never sent anywhere else; a redirect is taken as an error.
 
@@ -135,6 +137,25 @@ Tick **Test mode** in the settings to use the test API key and have test deliver
 ## Refunds
 
 Crypto payments cannot be pulled back, so the gateway does not support WooCommerce's refund button. Send the coins back from your own wallet and record the refund on the charge in the VeliraPay dashboard, which sends `charge.refunded` and notes it on the order.
+
+## Emails to customers
+
+`send_email: false` only keeps VeliraPay from emailing the invoice. In live mode VeliraPay still emails the billing address, on the store's behalf and in the checkout's language, alongside WooCommerce's own emails:
+
+- a receipt when the payment confirms,
+- a notice when the payment falls short,
+- a notice of each refund you record.
+
+In test mode VeliraPay only emails addresses of the account's own members, so a test customer gets nothing.
+
+## Privacy and external services
+
+The plugin talks to two services, and to nothing else:
+
+- **VeliraPay's API**, `https://api.velirapay.com`, the payment processor the plugin adds. When a customer pays, it creates the order's invoice with the billing name and email, the order total and currency, and a memo naming the order number and the store, and reads which coins the account takes in the store currency. It reads the order's invoice on the order-received page, from **Check VeliraPay status**, every hour for orders waiting for payment, and before WooCommerce's **Hold stock** timer cancels an order, and voids it when the order is cancelled, trashed or deleted. When an API key is saved, it reads the account and the invoices list to check the key. The customer then pays on VeliraPay's hosted page, and VeliraPay sends the store signed webhooks. VeliraPay's [terms](https://velirapay.com/terms) and [privacy policy](https://velirapay.com/privacy) apply.
+- **GitHub's API**, `https://api.github.com`, at most every twelve hours, for the plugin's latest release (see [Installation](#installation)). The request names the plugin and its version, and nothing about the store or its customers. GitHub's [terms](https://docs.github.com/site-policy/github-terms/github-terms-of-service) and [privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement) apply.
+
+Under **Settings → Privacy**, WordPress offers text for the store's privacy policy saying what is sent to VeliraPay and which emails it sends customers.
 
 ## Development
 

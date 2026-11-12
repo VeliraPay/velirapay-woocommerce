@@ -27,6 +27,19 @@ When a customer picks it, the order becomes a VeliraPay invoice for the order to
 
 Refunds are not automated. Crypto cannot be pulled back: send the coins from your own wallet and record the refund in the VeliraPay dashboard, which notes it on the order.
 
+== External services ==
+
+This plugin connects to VeliraPay's API, https://api.velirapay.com, the crypto payment processor it adds to the store, to take payments:
+
+* When a customer pays an order, it creates a VeliraPay invoice for it, sending the customer's billing name and email address, the order total and currency, and a memo with the order number and the store's name. It also reads which coins the store's VeliraPay account takes in the store currency.
+* It reads the order's invoice when the customer opens the order-received page, when you choose "Check VeliraPay status", every hour for orders waiting for payment, and before WooCommerce's "Hold stock" timer cancels an order.
+* It voids the order's invoice when the order is cancelled, trashed or deleted.
+* When you save an API key, it reads the account and its invoices to check the key.
+
+The customer then pays on VeliraPay's hosted invoice page, and VeliraPay sends the store signed webhooks about the invoice. VeliraPay's terms of service: https://velirapay.com/terms. Its privacy policy: https://velirapay.com/privacy.
+
+To offer new versions of itself, the plugin also asks GitHub's API, https://api.github.com, for its latest release, at most every twelve hours. The request names the plugin and its version, and nothing about the store or its customers. GitHub's terms of service: https://docs.github.com/site-policy/github-terms/github-terms-of-service. Its privacy statement: https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement.
+
 == Installation ==
 
 1. Install and activate the plugin. WooCommerce 8.3 or later must be active.
@@ -75,6 +88,10 @@ Hourly polling works through every eligible order in batches of up to 50, at lea
 Yes. Turn on test mode and use a test API key and a test endpoint: payments then run on the test networks, and a test charge's page in the VeliraPay dashboard has a "Simulate payment" button.
 
 An order with an existing invoice keeps that invoice when you switch modes or accounts. To retry or check such an order, restore the original mode and account's API key; a live invoice is never replaced with a test invoice.
+
+= Does VeliraPay email my customers? =
+
+The invoice itself is not emailed: the customer is sent straight to its page. In live mode, VeliraPay still emails the billing address, on the store's behalf and alongside WooCommerce's own emails, a receipt when the payment confirms, a notice when it falls short, and a notice of each refund you record. In test mode it only emails addresses of your VeliraPay account's own members.
 
 = How is the plugin updated? =
 
