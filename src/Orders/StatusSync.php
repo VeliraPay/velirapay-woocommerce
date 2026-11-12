@@ -20,6 +20,26 @@ final class StatusSync
     private const MOST_TRANSFERS = 20;
 
     /**
+     * How a coin is named in a note where its code alone would not say which network it is on: by its ticker and network,
+     * as VeliraPay's own lists do. Any other coin, including one added later, is named by its code.
+     */
+    private const COIN_NAMES = [
+        'BTC_LIGHTNING' => 'BTC (Lightning)',
+        'USDT' => 'USDT (Ethereum)',
+        'USDC' => 'USDC (Ethereum)',
+        'USDT_TRON' => 'USDT (Tron)',
+        'USDT_BSC' => 'USDT (BNB Chain)',
+        'USDC_BSC' => 'USDC (BNB Chain)',
+        'USDC_BASE' => 'USDC (Base)',
+        'ETH_BASE' => 'ETH (Base)',
+        'USDT_ARBITRUM' => 'USDT (Arbitrum One)',
+        'USDC_ARBITRUM' => 'USDC (Arbitrum One)',
+        'ETH_ARBITRUM' => 'ETH (Arbitrum One)',
+        'USDT_POLYGON' => 'USDT (Polygon)',
+        'USDC_POLYGON' => 'USDC (Polygon)',
+    ];
+
+    /**
      * Apply a webhook event to the order the invoice was created for.
      *
      * @param  string  $event  The event type, such as "invoice.paid".
@@ -33,7 +53,7 @@ final class StatusSync
         $payout = is_array($data['payout'] ?? null) ? $data['payout'] : [];
 
         $code = self::text($charge['code'] ?? null);
-        $asset = self::text($charge['asset'] ?? null);
+        $asset = self::coin($charge['asset'] ?? null);
         $due = self::amount($charge['asset_amount'] ?? null);
         $received = self::amount($charge['received_amount'] ?? null);
         $seen = self::amount($transfer['amount'] ?? $charge['asset_amount'] ?? null);
@@ -53,13 +73,20 @@ final class StatusSync
                 $due,
                 $code,
             )),
-            'charge.payment_detected' => $this->hold($order, sprintf(
-                /* translators: 1: amount, 2: coin, 3: charge code */
-                __('Payment of %1$s %2$s seen on chain, waiting for confirmations (charge %3$s).', 'velirapay-woocommerce'),
-                $seen,
-                $asset,
-                $code,
-            ), detectedCharge: $code),
+            'charge.payment_detected' => $this->hold($order, ($charge['asset'] ?? null) === 'BTC_LIGHTNING'
+                ? sprintf(
+                    /* translators: 1: amount in bitcoin, 2: charge code */
+                    __('Lightning payment of %1$s BTC received. A paid Lightning invoice is final, so VeliraPay counts it in a moment (charge %2$s).', 'velirapay-woocommerce'),
+                    $seen,
+                    $code,
+                )
+                : sprintf(
+                    /* translators: 1: amount, 2: coin, 3: charge code */
+                    __('Payment of %1$s %2$s seen on chain, waiting for confirmations (charge %3$s).', 'velirapay-woocommerce'),
+                    $seen,
+                    $asset,
+                    $code,
+                ), detectedCharge: $code),
             'charge.underpaid' => $this->hold($order, sprintf(
                 /* translators: 1: amount received, 2: amount due, 3: coin, 4: charge code */
                 __('Underpaid: %1$s of %2$s %3$s received (charge %4$s). The customer can send the rest on the invoice page; if you accept the short payment in the VeliraPay dashboard instead, this order stays on hold for you to fulfil or cancel.', 'velirapay-woocommerce'),
@@ -143,7 +170,7 @@ final class StatusSync
         $charge = is_array($data['charge'] ?? null) ? $data['charge'] : [];
         $transfer = is_array($data['transaction'] ?? null) ? $data['transaction'] : [];
         $number = self::text($invoice['number'] ?? (is_array($charge['invoice'] ?? null) ? ($charge['invoice']['number'] ?? null) : null));
-        $asset = self::text($charge['asset'] ?? null);
+        $asset = self::coin($charge['asset'] ?? null);
         $seen = self::amount($transfer['amount'] ?? $charge['asset_amount'] ?? null);
 
         match ($event) {
@@ -537,6 +564,16 @@ final class StatusSync
     private static function text(mixed $value): string
     {
         return is_scalar($value) ? (string) $value : '';
+    }
+
+    /**
+     * Get how a coin is named in a note, such as "USDT (Tron)" for USDT_TRON, or "BTC".
+     */
+    private static function coin(mixed $asset): string
+    {
+        $code = self::text($asset);
+
+        return self::COIN_NAMES[$code] ?? $code;
     }
 
     /**

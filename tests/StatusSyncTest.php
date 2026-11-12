@@ -139,6 +139,35 @@ final class StatusSyncTest extends TestCase
         $this->assertSame(['Payment of 0.0025 BTC seen on chain, waiting for confirmations (charge k3v9x2m7q8wz).'], $order->notes);
     }
 
+    public function test_notes_name_a_token_by_its_ticker_and_network_and_keep_a_coin_they_do_not_know_by_its_code(): void
+    {
+        $order = new FakeOrder('pending');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'charge.created', ['charge' => self::charge('pending', ['asset' => 'USDT_TRON', 'asset_amount' => '52.400000'])]);
+        $sync->applyEvent($order, 'charge.created', ['charge' => self::charge('pending', ['asset' => 'ETH_BASE', 'asset_amount' => '0.0151'])]);
+        $sync->applyEvent($order, 'charge.created', ['charge' => self::charge('pending', ['asset' => 'NEWCOIN', 'asset_amount' => '3'])]);
+
+        $this->assertSame([
+            'The customer chose USDT (Tron) on VeliraPay: 52.4 USDT (Tron) due at the locked rate (charge k3v9x2m7q8wz).',
+            'The customer chose ETH (Base) on VeliraPay: 0.0151 ETH (Base) due at the locked rate (charge k3v9x2m7q8wz).',
+            'The customer chose NEWCOIN on VeliraPay: 3 NEWCOIN due at the locked rate (charge k3v9x2m7q8wz).',
+        ], $order->notes);
+    }
+
+    public function test_a_lightning_payment_is_noted_as_final_rather_than_waiting_for_confirmations(): void
+    {
+        $order = new FakeOrder('pending');
+
+        (new StatusSync)->applyEvent($order, 'charge.payment_detected', [
+            'charge' => self::charge('pending', ['asset' => 'BTC_LIGHTNING', 'asset_amount' => '0.00012000']),
+            'transaction' => ['txid' => 'a1b2', 'amount' => '0.00012000', 'confirmations' => 1],
+        ]);
+
+        $this->assertSame('on-hold', $order->status);
+        $this->assertSame(['Lightning payment of 0.00012 BTC received. A paid Lightning invoice is final, so VeliraPay counts it in a moment (charge k3v9x2m7q8wz).'], $order->notes);
+    }
+
     public function test_a_detected_payment_only_adds_a_note_once_on_hold_or_paid(): void
     {
         $held = new FakeOrder('on-hold');
