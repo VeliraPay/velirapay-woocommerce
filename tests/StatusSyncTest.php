@@ -330,6 +330,25 @@ final class StatusSyncTest extends TestCase
         $this->assertSame('k3v9x2m7q8wz', $order->transactionId);
     }
 
+    public function test_a_top_up_reported_after_the_invoice_was_paid_completes_the_order_at_the_next_poll(): void
+    {
+        $order = new FakeOrder('pending');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'charge.payment_detected', ['charge' => self::charge('pending', ['transactions' => [self::transfer('t1', false)]]), 'transaction' => self::transfer('t1', false)]);
+        $sync->applyEvent($order, 'charge.underpaid', ['charge' => self::charge('underpaid', ['transactions' => [self::transfer('t1', true)]])]);
+        // On Tron a transfer is credited as it is detected, so the top-up's detection can be delivered after the invoice is paid.
+        $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']])]);
+
+        $this->assertSame('on-hold', $order->status);
+
+        $sync->applyEvent($order, 'charge.payment_detected', ['charge' => self::charge('underpaid', ['transactions' => [self::transfer('t1', true), self::transfer('t2', false)]]), 'transaction' => self::transfer('t2', false)]);
+        $sync->applyInvoice($order, self::invoice('paid', [['id' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']]));
+
+        $this->assertSame('processing', $order->status);
+        $this->assertSame('k3v9x2m7q8wz', $order->transactionId);
+    }
+
     public function test_a_simulated_short_payment_topped_up_by_another_simulation_completes_the_order(): void
     {
         $order = new FakeOrder('pending');
