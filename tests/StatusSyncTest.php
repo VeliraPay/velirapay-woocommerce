@@ -330,6 +330,19 @@ final class StatusSyncTest extends TestCase
         $this->assertSame('k3v9x2m7q8wz', $order->transactionId);
     }
 
+    public function test_a_simulated_short_payment_topped_up_by_another_simulation_completes_the_order(): void
+    {
+        $order = new FakeOrder('pending');
+        $sync = new StatusSync;
+
+        // Simulate payment, in test mode, credits each made-up transfer at once, without announcing it as detected.
+        $sync->applyEvent($order, 'charge.underpaid', ['charge' => self::charge('underpaid', ['transactions' => [self::transfer('simulated-q8w2e6r4t1y3', true)]])]);
+        $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']])]);
+
+        $this->assertSame('processing', $order->status);
+        $this->assertSame('k3v9x2m7q8wz', $order->transactionId);
+    }
+
     public function test_a_second_transfer_seen_before_the_charge_came_up_short_still_completes_the_order(): void
     {
         $order = new FakeOrder('pending');

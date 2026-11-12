@@ -336,6 +336,8 @@ final class StatusSync
         $marker = match (true) {
             // A charge that is closed, or short past its rate lock, becomes paid only when the merchant accepts it.
             $event === 'charge.late_payment' && ($charge['status'] ?? null) !== 'paid' => 'late:'.$code,
+            // A test-mode simulation tops a charge up without announcing the transfer, so it says nothing either way.
+            $event === 'charge.underpaid' && self::hasSimulatedTransfer($transfers ?? []) => null,
             // Counted against the transfers VeliraPay had counted, so a top-up seen later can be told apart.
             $event === 'charge.underpaid' => 'short:'.$code.':'.count(array_filter($transfers ?? [], static fn (mixed $transfer): bool => is_array($transfer) && ($transfer['credited'] ?? false) === true)),
             $event === 'charge.payment_detected' && $transfers !== null => 'seen:'.$code.':'.count($transfers),
@@ -345,6 +347,22 @@ final class StatusSync
         if ($marker !== null && ! $order->hasHandledEvent($marker)) {
             $order->rememberEvent($marker);
         }
+    }
+
+    /**
+     * Determine if a charge's transfers include one made up by the dashboard's "Simulate payment", in test mode.
+     *
+     * @param  array<array-key, mixed>  $transfers
+     */
+    private static function hasSimulatedTransfer(array $transfers): bool
+    {
+        foreach ($transfers as $transfer) {
+            if (is_array($transfer) && str_starts_with(self::text($transfer['txid'] ?? null), 'simulated-')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
