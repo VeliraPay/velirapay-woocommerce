@@ -29,7 +29,7 @@ The official WooCommerce plugin for [VeliraPay](https://velirapay.com), the cryp
 
 Download the latest zip from the [releases](https://github.com/VeliraPay/velirapay-woocommerce/releases) and upload it under **Plugins → Add New → Upload Plugin**, or put the folder in `wp-content/plugins/`. The plugin has no runtime dependencies and needs no `composer install`.
 
-From 0.4.0 on, WordPress offers new versions on its own **Plugins** and **Updates** screens, and can update the plugin automatically if you let it. The plugin's `Update URI` header points WordPress at this repository instead of WordPress.org, and the plugin answers its update check with the latest GitHub release: only a newer version, only with its `velirapay-woocommerce-<version>.zip`, and only from `https://github.com/VeliraPay/velirapay-woocommerce/releases/download/`. GitHub is asked at most every twelve hours, with a five-second timeout, and a failure only means no update is offered until the next check. A store on 0.3.1 or earlier has to install 0.4.0 by hand once.
+From 0.4.0 on, WordPress offers new versions on its own **Plugins** and **Updates** screens. The plugin's `Update URI` header points WordPress at this repository instead of WordPress.org, and the plugin answers its update check with the latest GitHub release: only a newer version, only with its `velirapay-woocommerce-<version>.zip`, and only from `https://github.com/VeliraPay/velirapay-woocommerce/releases/download/`. GitHub is asked at most every twelve hours, with a five-second timeout, and a failure only means no update is offered until the next check. A store on 0.3.1 or earlier has to install 0.4.0 by hand once.
 
 To build the zip yourself:
 
@@ -46,7 +46,7 @@ bin/build.sh
 5. Enable the gateway and save.
 6. Back on the endpoint's page in the dashboard, press **Verify**. The plugin answers the challenge VeliraPay sends, and the endpoint receives nothing until it has.
 
-Each mode has its own keys and endpoints, so do the dashboard steps once in live mode and once in test mode. The settings page shows a notice when the gateway is enabled without a key for its mode, or when the store currency is not one VeliraPay bills in; in both cases the method is not offered at checkout. It also shows what VeliraPay last said refusing the current mode's key (401 or 403), such as a key without `invoices:write` at checkout, which cannot be checked without creating an invoice, until a request of the same kind, a read or a write, succeeds.
+Each mode has its own keys and endpoints, so do the dashboard steps once in live mode and once in test mode. The settings page shows a notice when the gateway is enabled without a key for its mode, or when the store currency is not one VeliraPay bills in, and when the checkout last found that the account takes no coin at all, with no payout address for any network; in each case the method is not offered at checkout. It also shows what VeliraPay last said refusing the current mode's key (401 or 403), such as a key without `invoices:write` at checkout, which cannot be checked without creating an invoice, until a request of the same kind, a read or a write, succeeds.
 
 ## How orders map to invoices
 

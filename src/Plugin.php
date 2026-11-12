@@ -502,6 +502,14 @@ final class Plugin
             ));
         }
 
+        if ($gateway->enabled === 'yes' && $gateway->takesNoCoin($currency)) {
+            self::notice(sprintf(
+                /* translators: %s: "live" or "test" */
+                __('VeliraPay is not offered at checkout: your VeliraPay account takes no coin in %s mode yet. Add a payout address under Payment settings in the VeliraPay dashboard; the checkout asks again within ten minutes.', 'velirapay-woocommerce'),
+                $gateway->mode(),
+            ));
+        }
+
         $refusals = [];
 
         foreach (['get', 'post'] as $kind) {

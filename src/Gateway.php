@@ -400,8 +400,7 @@ final class Gateway extends WC_Payment_Gateway
             return null;
         }
 
-        // Keyed by the key itself, since which coins are taken depends on its account.
-        $cacheKey = 'velirapay_assets_'.substr(hash('sha256', $this->apiKey()), 0, 16).'_'.$currency;
+        $cacheKey = $this->assetsCacheKey($currency);
         $cached = get_transient($cacheKey);
 
         if ($cached === 'unavailable') {
@@ -423,6 +422,36 @@ final class Gateway extends WC_Payment_Gateway
         set_transient($cacheKey, $assets, self::ASSETS_CACHE_SECONDS);
 
         return $assets;
+    }
+
+    /**
+     * Determine if VeliraPay last told the checkout that the account takes no coin at all in a currency, from what the
+     * checkout remembered, without asking again.
+     */
+    public function takesNoCoin(string $currency): bool
+    {
+        $cached = $this->apiKey() === '' ? false : get_transient($this->assetsCacheKey($currency));
+
+        if (! is_array($cached)) {
+            return false;
+        }
+
+        foreach (self::payableCoins($cached) as $coin) {
+            if ($coin['accepted'] !== false) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Get the transient the coins on offer in a currency are remembered in, keyed by the key itself, since which coins
+     * are taken depends on its account.
+     */
+    private function assetsCacheKey(string $currency): string
+    {
+        return 'velirapay_assets_'.substr(hash('sha256', $this->apiKey()), 0, 16).'_'.$currency;
     }
 
     /**

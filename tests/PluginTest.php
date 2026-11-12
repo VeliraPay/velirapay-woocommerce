@@ -12,6 +12,7 @@ use VeliraPay\WooCommerce\Api\Client;
 use VeliraPay\WooCommerce\Gateway;
 use VeliraPay\WooCommerce\Orders\WooCommerceOrder;
 use VeliraPay\WooCommerce\Plugin;
+use WC_Cart;
 use WC_Order;
 
 final class PluginTest extends TestCase
@@ -312,6 +313,28 @@ final class PluginTest extends TestCase
         $client->createInvoice(['amount' => '49.90'], 'key');
 
         $this->assertStringNotContainsString('refused', $this->notices());
+    }
+
+    public function test_an_account_that_takes_no_coin_is_explained_when_checkout_found_so(): void
+    {
+        $this->pendingOrder();
+        $gateway = Plugin::gateway();
+        $cart = new WC_Cart;
+        $cart->set_total('49.90');
+        $GLOBALS['velirapay_test_cart'] = $cart;
+
+        $this->assertStringNotContainsString('takes no coin', $this->notices());
+
+        $this->answer(200, '{"data":[{"id":"BTC","accepted":false,"minimum_price":"0.50"},{"id":"ETH","accepted":false,"minimum_price":"0.50"}]}');
+        $this->assertFalse($gateway->is_available());
+        $this->assertStringContainsString('VeliraPay is not offered at checkout: your VeliraPay account takes no coin in live mode yet.', $this->notices());
+
+        unset($GLOBALS['velirapay_test_transients']);
+        $this->answer(200, '{"data":[{"id":"BTC","accepted":true,"minimum_price":"0.50"}]}');
+        $this->assertTrue($gateway->is_available());
+        $this->assertStringNotContainsString('takes no coin', $this->notices());
+
+        unset($GLOBALS['velirapay_test_cart']);
     }
 
     /**
