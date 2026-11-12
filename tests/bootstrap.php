@@ -297,6 +297,13 @@ function wc_get_order(int $id): WC_Order|false
     return $GLOBALS['velirapay_test_orders'][$id] ?? false;
 }
 
+function wc_get_order_notes(array $args): array
+{
+    $order = $GLOBALS['velirapay_test_orders'][$args['order_id'] ?? 0] ?? null;
+
+    return $order instanceof WC_Order ? array_map(static fn (string $note): stdClass => (object) ['content' => $note], $order->notes) : [];
+}
+
 function wc_format_decimal(string $value, int $decimals): string
 {
     return number_format((float) $value, $decimals, '.', '');

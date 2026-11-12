@@ -10,6 +10,16 @@ namespace VeliraPay\WooCommerce\Orders;
 final class StatusSync
 {
     /**
+     * The statuses of an order still waiting for its payment, the only ones a payment moves.
+     */
+    private const UNPAID_STATUSES = ['pending', 'failed', 'on-hold'];
+
+    /**
+     * How many transfers to one charge are looked through when telling a topped-up short payment from an accepted one.
+     */
+    private const MOST_TRANSFERS = 20;
+
+    /**
      * Apply a webhook event to the order the invoice was created for.
      *
      * @param  string  $event  The event type, such as "invoice.paid".
@@ -27,6 +37,10 @@ final class StatusSync
         $due = self::amount($charge['asset_amount'] ?? null);
         $received = self::amount($charge['received_amount'] ?? null);
         $seen = self::amount($transfer['amount'] ?? $charge['asset_amount'] ?? null);
+
+        if ($code !== '') {
+            $this->rememberCharge($order, $event, $code, $charge);
+        }
 
         match ($event) {
             'invoice.paid' => $this->markPaid($order, $invoice),
@@ -48,7 +62,7 @@ final class StatusSync
             )),
             'charge.underpaid' => $this->hold($order, sprintf(
                 /* translators: 1: amount received, 2: amount due, 3: coin, 4: charge code */
-                __('Underpaid: %1$s of %2$s %3$s received (charge %4$s). Check the charge in the VeliraPay dashboard.', 'velirapay-woocommerce'),
+                __('Underpaid: %1$s of %2$s %3$s received (charge %4$s). The customer can send the rest on the invoice page; if you accept the short payment in the VeliraPay dashboard instead, this order stays on hold for you to fulfil or cancel.', 'velirapay-woocommerce'),
                 $received,
                 $due,
                 $asset,
@@ -81,7 +95,7 @@ final class StatusSync
                 ))
                 : $this->holdWhileUnpaid($order, sprintf(
                     /* translators: 1: amount, 2: coin, 3: charge code */
-                    __('A late payment of %1$s %2$s arrived on charge %3$s. Accept it in the VeliraPay dashboard; refund it from your wallet after accepting.', 'velirapay-woocommerce'),
+                    __('A late payment of %1$s %2$s arrived on charge %3$s. It has to be accepted in the VeliraPay dashboard, whether you keep it or refund it from your wallet. Accepting it does not mark this order paid: move the order to Processing to fulfil it, or cancel it once the payment is refunded.', 'velirapay-woocommerce'),
                     $seen,
                     $asset,
                     $code,
@@ -192,7 +206,9 @@ final class StatusSync
     }
 
     /**
-     * Record the payment with the charge that paid the invoice, once, or hold the order when the invoice no longer covers it.
+     * Record the payment with the charge that paid the invoice, once. An order the invoice no longer covers, or whose
+     * invoice was paid by accepting a short or late payment, is held instead, and one that no longer waits for payment,
+     * such as a cancelled one, is only noted.
      *
      * @param  array<array-key, mixed>  $invoice
      */
@@ -202,7 +218,8 @@ final class StatusSync
             return;
         }
 
-        $charge = self::chargeWithStatus($invoice, 'paid');
+        $charge = $this->payingCharge($order, $invoice);
+        $number = self::text($invoice['number'] ?? null);
 
         if (! self::covers($invoice, $order)) {
             // Remembered like an event, so the webhook and every later poll note the mismatch once between them.
@@ -215,7 +232,7 @@ final class StatusSync
             $this->hold($order, sprintf(
                 /* translators: 1: invoice number, 2: charge code, 3: invoice amount and currency, 4: order total and currency */
                 __('VeliraPay invoice %1$s was paid (charge %2$s), but it was for %3$s and the order now comes to %4$s, so it was not marked paid. Check the payment before fulfilling the order.', 'velirapay-woocommerce'),
-                self::text($invoice['number'] ?? null),
+                $number,
                 $charge,
                 trim(self::money($invoice['amount'] ?? null).' '.self::text($invoice['currency'] ?? null)),
                 trim(self::money($order->total()).' '.$order->currency()),
@@ -225,12 +242,132 @@ final class StatusSync
             return;
         }
 
+        if ($this->wasAccepted($order, $charge)) {
+            // Noted once between the webhook and every later poll, as the mismatch is.
+            if (! $order->hasHandledEvent('accepted:'.$charge)) {
+                $this->holdWhileUnpaid($order, $order->hasHandledEvent('late:'.$charge)
+                    ? sprintf(
+                        /* translators: 1: invoice number, 2: charge code */
+                        __('VeliraPay invoice %1$s was paid by accepting the late payment on charge %2$s, so this order was not marked paid. Move it to Processing to fulfil it, or cancel it once the payment is refunded.', 'velirapay-woocommerce'),
+                        $number,
+                        $charge,
+                    )
+                    : sprintf(
+                        /* translators: 1: invoice number, 2: charge code */
+                        __('VeliraPay invoice %1$s was paid, but charge %2$s was last reported short and no top-up was seen since, so the short payment was most likely accepted and this order was not marked paid. Check the charge in the VeliraPay dashboard, then move the order to Processing to fulfil it, or cancel it once the payment is refunded.', 'velirapay-woocommerce'),
+                        $number,
+                        $charge,
+                    ));
+                $order->rememberEvent('accepted:'.$charge);
+            }
+
+            return;
+        }
+
+        if (! in_array($order->status(), self::UNPAID_STATUSES, true)) {
+            $leftAlone = 'left-alone:'.self::text($invoice['code'] ?? $invoice['id'] ?? null);
+
+            if (! $order->hasHandledEvent($leftAlone)) {
+                $order->addNote($order->status() === 'cancelled'
+                    ? sprintf(
+                        /* translators: 1: invoice number, 2: charge code */
+                        __('VeliraPay invoice %1$s was paid (charge %2$s) after this order was cancelled, so it was left cancelled. Move it to Processing to fulfil it, or refund the payment from your wallet and record the refund in the VeliraPay dashboard.', 'velirapay-woocommerce'),
+                        $number,
+                        $charge,
+                    )
+                    : sprintf(
+                        /* translators: 1: invoice number, 2: charge code, 3: order status */
+                        __('VeliraPay invoice %1$s was paid (charge %2$s) while this order was %3$s, so its status was left alone.', 'velirapay-woocommerce'),
+                        $number,
+                        $charge,
+                        $order->status(),
+                    ));
+                $order->rememberEvent($leftAlone);
+            }
+
+            return;
+        }
+
         $order->markPaid($charge, sprintf(
             /* translators: 1: invoice number, 2: charge code */
             __('VeliraPay invoice %1$s paid (charge %2$s).', 'velirapay-woocommerce'),
-            self::text($invoice['number'] ?? null),
+            $number,
             $charge,
         ));
+    }
+
+    /**
+     * Remember what a charge event says about how the charge may come to be paid: by being accepted, after a late
+     * payment, or after a short one that no top-up followed.
+     *
+     * @param  array<array-key, mixed>  $charge
+     */
+    private function rememberCharge(Order $order, string $event, string $code, array $charge): void
+    {
+        $transfers = is_array($charge['transactions'] ?? null) ? $charge['transactions'] : null;
+
+        $marker = match (true) {
+            // A charge that is closed, or short past its rate lock, becomes paid only when the merchant accepts it.
+            $event === 'charge.late_payment' && ($charge['status'] ?? null) !== 'paid' => 'late:'.$code,
+            // Counted against the transfers VeliraPay had counted, so a top-up seen later can be told apart.
+            $event === 'charge.underpaid' => 'short:'.$code.':'.count(array_filter($transfers ?? [], static fn (mixed $transfer): bool => is_array($transfer) && ($transfer['credited'] ?? false) === true)),
+            $event === 'charge.payment_detected' && $transfers !== null => 'seen:'.$code.':'.count($transfers),
+            default => null,
+        };
+
+        if ($marker !== null && ! $order->hasHandledEvent($marker)) {
+            $order->rememberEvent($marker);
+        }
+    }
+
+    /**
+     * Determine if the charge was paid by the merchant accepting it rather than by the customer's payment covering it:
+     * a late payment reached it, or it was last reported short and no transfer was seen after.
+     */
+    private function wasAccepted(Order $order, string $charge): bool
+    {
+        if ($charge === '') {
+            return false;
+        }
+
+        if ($order->hasHandledEvent('late:'.$charge)) {
+            return true;
+        }
+
+        for ($counted = self::MOST_TRANSFERS; $counted >= 0; $counted--) {
+            if (! $order->hasHandledEvent("short:{$charge}:{$counted}")) {
+                continue;
+            }
+
+            for ($seen = $counted + 1; $seen <= self::MOST_TRANSFERS + 1; $seen++) {
+                if ($order->hasHandledEvent("seen:{$charge}:{$seen}")) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Get the code of the charge that paid the invoice: a paid charge the customer's payment covered, ahead of one
+     * the merchant accepted.
+     *
+     * @param  array<array-key, mixed>  $invoice
+     */
+    private function payingCharge(Order $order, array $invoice): string
+    {
+        $paid = self::chargesWithStatus($invoice, 'paid');
+
+        foreach ($paid as $charge) {
+            if (! $this->wasAccepted($order, $charge)) {
+                return $charge;
+            }
+        }
+
+        return $paid[0] ?? '';
     }
 
     /**
@@ -248,11 +385,12 @@ final class StatusSync
     }
 
     /**
-     * Put the order on hold while a payment is confirming or short, keeping the note either way.
+     * Put the order on hold while a payment is confirming or short, keeping the note either way. A cancelled order is
+     * never brought back: it only gets the note.
      */
     private function hold(Order $order, string $note): void
     {
-        if ($order->isPaid() || $order->status() === 'on-hold') {
+        if ($order->isPaid() || in_array($order->status(), ['on-hold', 'cancelled'], true)) {
             $order->addNote($note);
 
             return;
@@ -266,7 +404,7 @@ final class StatusSync
      */
     private function holdWhileUnpaid(Order $order, string $note): void
     {
-        if (in_array($order->status(), ['pending', 'failed', 'on-hold'], true)) {
+        if (in_array($order->status(), self::UNPAID_STATUSES, true)) {
             $this->hold($order, $note);
 
             return;
@@ -284,7 +422,7 @@ final class StatusSync
     {
         $charge = self::chargeWithStatus($invoice, 'underpaid');
 
-        if ($charge === '' || $order->isPaid() || $order->status() === 'on-hold') {
+        if ($charge === '' || $order->isPaid() || ! in_array($order->status(), ['pending', 'failed'], true)) {
             return;
         }
 
@@ -324,14 +462,27 @@ final class StatusSync
      */
     private static function chargeWithStatus(array $invoice, string $status): string
     {
+        return self::chargesWithStatus($invoice, $status)[0] ?? '';
+    }
+
+    /**
+     * Get the codes of the invoice's charges in a status, in the order the invoice lists them.
+     *
+     * @param  array<array-key, mixed>  $invoice
+     * @return list<string>
+     */
+    private static function chargesWithStatus(array $invoice, string $status): array
+    {
+        $codes = [];
+
         foreach (is_array($invoice['charges'] ?? null) ? $invoice['charges'] : [] as $charge) {
             if (is_array($charge) && ($charge['status'] ?? null) === $status) {
                 // Webhooks name a charge by "code", the API by "id".
-                return self::text($charge['code'] ?? $charge['id'] ?? null);
+                $codes[] = self::text($charge['code'] ?? $charge['id'] ?? null);
             }
         }
 
-        return '';
+        return $codes;
     }
 
     /**

@@ -5,6 +5,9 @@ All notable changes to this plugin are documented here. It follows [Semantic Ver
 ## Unreleased
 
 - A late payment to an expired, canceled or underpaid charge puts an order still pending, failed or on hold on hold, instead of only noting it, so WooCommerce's **Hold stock** timer no longer cancels the order, and voids its invoice, while the money waits for you to accept it. A cancelled order still only gets the note.
+- An invoice paid by accepting a late payment, or a short one that no top-up followed, puts the order on hold instead of marking it paid, since VeliraPay has you accept such a payment before refunding it as well as to keep it. The order and its notes say what to do next. A short payment the customer topped up in time still completes the order. Telling the two apart needs the `charge.underpaid`, `charge.payment_detected` and `charge.late_payment` webhooks.
+- A cancelled order is never brought back: a paid invoice, a detected or short payment, or a check from the order screen only add a note to it. Previously a paid invoice moved it to Processing.
+- The notes on short and late payments say what accepting them in the VeliraPay dashboard does to the order.
 
 ## 0.3.1 - 2026-11-06
 

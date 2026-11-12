@@ -62,7 +62,7 @@ The request carries the idempotency key `woocommerce-order-<order id>-<order key
 
 If the customer comes back to pay the same order again, the open invoice is reused while its amount and currency still match the order. When they no longer do, the old invoice is voided and a new one created, under an idempotency key of its own so a retry can never be answered with an invoice voided since. An old invoice VeliraPay will not void because a payment to it is on its way is kept instead, with a note, and any other failure to void stops the checkout so two invoices are never payable at once. The order remembers the codes of the invoices it replaced (`_velirapay_superseded_invoice_code`), so a payment that reaches one of them anyway is still matched to it.
 
-Cancelling an order, from the admin, from the customer's account or by WooCommerce's **Hold stock** timer, voids its invoice with `POST /v1/invoices/{id}/void`, so the hosted page stops taking payment. VeliraPay answers 409 when the invoice is already paid or voided, or has a payment on its way; the plugin takes that as the invoice no longer being voidable and lets VeliraPay report what happens to it.
+Cancelling an order, from the admin, from the customer's account or by WooCommerce's **Hold stock** timer, voids its invoice with `POST /v1/invoices/{id}/void`, so the hosted page stops taking payment. VeliraPay answers 409 when the invoice is already paid or voided, or has a payment on its way; the plugin takes that as the invoice no longer being voidable and lets VeliraPay report what happens to it. The order stays cancelled whatever it reports: a payment that completes the invoice anyway only adds a note.
 
 ## How statuses map
 
@@ -70,12 +70,14 @@ The same mapping is applied whether the news comes from a webhook or from pollin
 
 | VeliraPay | WooCommerce | |
 | --- | --- | --- |
-| `invoice.paid`, or an invoice polled as `paid` | `payment_complete()` | The order moves to **Processing** or **Completed** with the paying charge's code as its transaction id. Applied once: a paid order is never completed again. |
+| `invoice.paid`, or an invoice polled as `paid` | `payment_complete()` | An order still pending, on hold or failed moves to **Processing** or **Completed** with the paying charge's code as its transaction id. Applied once: a paid order is never completed again. |
 | `invoice.paid` for a different amount or currency than the order now comes to | **On hold** | The order was edited after its invoice was raised. The note gives both amounts; it is added once, whether the news came from the webhook or from polling. |
+| `invoice.paid` by accepting a late payment, or a short one | **On hold** | The paying charge had a late payment (`charge.late_payment` on an expired, canceled or underpaid charge), or was last reported short (`charge.underpaid`) with no transfer seen since (`charge.payment_detected`). VeliraPay only marks such a charge paid when you accept it, which you also have to do before refunding it, so the order is held for you to fulfil or cancel. The note is added once. A short payment the customer topped up in time completes the order as usual. Without those webhooks, polling cannot tell the difference and a paid invoice completes the order. |
+| `invoice.paid` for a cancelled order | note | A cancelled order is never moved back: the note says the invoice was paid after all, for you to move the order to **Processing** or refund the payment. Any other status outside pending, on hold and failed is likewise left alone. |
 | `invoice.paid` for an invoice the order replaced | **On hold** | Never counted as the order's payment. On an order already paid, only a note saying the customer paid twice. |
 | `charge.payment_detected`, `charge.underpaid` or `charge.late_payment` for an invoice the order replaced | note | Money is moving to the old invoice; check it in the dashboard. Anything else about a replaced invoice, its void included, is ignored. |
-| `charge.payment_detected` | **On hold** | A transfer was seen on chain and is gathering confirmations. The note says how much, in which coin. |
-| `charge.underpaid`, or an open invoice polled with an underpaid charge | **On hold** | The note says what was received against what was due. |
+| `charge.payment_detected` | **On hold** | A transfer was seen on chain and is gathering confirmations. The note says how much, in which coin. A cancelled order only gets the note. |
+| `charge.underpaid`, or an open invoice polled with an underpaid charge | **On hold** | The note says what was received against what was due. A cancelled order only gets the note. |
 | `invoice.voided`, or an invoice polled as `void` | **Cancelled** | Unless the order was paid after all, in which case only a note is added. |
 | `charge.expired` | note | The rate lock ran out; the customer can get a new quote on the hosted page. |
 | `charge.late_payment` on an expired, canceled or underpaid charge | **On hold** | Funds arrived after the charge expired or was canceled, or after an underpaid charge's rate lock ended. They wait for you to accept them in the dashboard, before any refund, so the order is held rather than left pending for the **Hold stock** timer to cancel. Only an order still pending, failed or on hold is moved; a cancelled one gets the note alone. |
@@ -86,7 +88,7 @@ The same mapping is applied whether the news comes from a webhook or from pollin
 
 A paid invoice sends both `charge.paid` and `invoice.paid`; only `invoice.paid` completes the order, so the order is fulfilled once.
 
-Refunded orders and orders with a recorded payment date keep their status when delayed events arrive, including when the merchant moved a paid order to a custom status or cancelled it afterward.
+Refunded orders and orders with a recorded payment date keep their status when delayed events arrive, including when the merchant moved a paid order to a custom status or cancelled it afterward. A cancelled order is never brought back by anything VeliraPay reports, whether or not it was paid before.
 
 ## Webhooks
 

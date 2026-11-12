@@ -54,7 +54,11 @@ It stays "Pending payment" with the invoice's number and link in its notes. When
 
 = Does cancelling an order stop the payment? =
 
-Cancelling an order voids its invoice, so the hosted page no longer takes payment. An invoice with a payment already on its way cannot be voided; VeliraPay reports the payment when it confirms and the order is marked paid.
+Cancelling an order voids its invoice, so the hosted page no longer takes payment. An invoice with a payment already on its way cannot be voided. A cancelled order is never brought back on its own: if its invoice is paid after all, the order stays cancelled and a note says so, for you to move it to "Processing" or refund the payment.
+
+= What if the customer pays too little, or too late? =
+
+The order goes "On hold" with a note. The customer can still send the rest of a short payment on the invoice page, which completes the order as usual. A short payment you accept in the VeliraPay dashboard, or a late one, which has to be accepted there whether you keep it or refund it, leaves the order on hold rather than marking it paid: move it to "Processing" to fulfil it, or cancel it once the payment is refunded. This relies on the charge.underpaid, charge.payment_detected and charge.late_payment webhooks: without them, a paid invoice marks the order paid.
 
 = What if a webhook never arrives? =
 
