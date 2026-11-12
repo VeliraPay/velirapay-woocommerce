@@ -9,6 +9,7 @@
         "crypto",
         "payments",
         "payment-gateway",
+        "payment-processing",
         "bitcoin",
         "ethereum",
         "webhooks",
@@ -20,7 +21,8 @@
         "usdt",
         "woocommerce-payment-gateway",
         "woocommerce-plugin",
-        "wordpress-plugin"
+        "wordpress-plugin",
+        "php"
     ],
     "homepage": "https://velirapay.com",
     "license": "GPL-2.0-or-later",
