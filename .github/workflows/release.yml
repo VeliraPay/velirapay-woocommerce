@@ -20,16 +20,44 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Check the tag
         run: |
           version=$(sed -n 's/^ \* Version: *//p' velirapay-woocommerce.php | head -n 1)
+          constant=$(sed -n "s/^ *public const VERSION = '\([^']*\)';/\1/p" src/Plugin.php | head -n 1)
           stable=$(sed -n 's/^Stable tag: *//p' readme.txt | head -n 1)
-          if [ "${GITHUB_REF_NAME}" != "v${version}" ] || [ "${stable}" != "${version}" ]; then
-            echo "The tag ${GITHUB_REF_NAME}, the plugin's version ${version} and the stable tag in readme.txt, ${stable}, must match." >&2
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ] || [ "${constant}" != "${version}" ] || [ "${stable}" != "${version}" ]; then
+            echo "The tag ${GITHUB_REF_NAME}, the plugin's version ${version}, Plugin::VERSION ${constant} and the stable tag in readme.txt, ${stable}, must match." >&2
             exit 1
           fi
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "The tag ${GITHUB_REF_NAME} points at a commit that is not on main." >&2
+            exit 1
+          fi
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          tools: composer:v2
+          coverage: none
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Lint
+        run: find velirapay-woocommerce.php src tests -name '*.php' -print0 | xargs -0 -n 1 php -l
+
+      - name: Run tests
+        run: vendor/bin/phpunit
+
+      - name: Run static analysis
+        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+      - name: Check code style
+        run: vendor/bin/pint --test
 
       - name: Build the zip
         run: bash bin/build.sh
