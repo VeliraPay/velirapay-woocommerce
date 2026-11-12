@@ -473,10 +473,19 @@ final class Gateway extends WC_Payment_Gateway
                 return $existing;
             }
 
-            if ($status === 'open' && ! $this->voidOutdated($client, $order, $code)) {
+            if ($status === 'open' && ! $this->voidOutdated($client, $order, $code, $existing)) {
                 return $existing;
             }
+
+            // An invoice that can no longer be paid is set aside before it is replaced, as an outdated one is before its void.
+            if ($status !== 'open') {
+                WooCommerceOrder::setInvoiceAside($order, $code);
+            }
         }
+
+        // The invoice the new one replaces: the current one, or the one a replacement that failed to be created set aside.
+        $superseded = WooCommerceOrder::supersededInvoiceCodesOf($order);
+        $replaced = $code !== '' ? $code : ($superseded === [] ? '' : $superseded[array_key_last($superseded)]);
 
         $name = trim($order->get_formatted_billing_full_name());
 
@@ -494,8 +503,9 @@ final class Gateway extends WC_Payment_Gateway
             'send_email' => false,
         ];
 
-        // Keyed by the invoice it replaces as well as its details, so a replay can never hand back an invoice voided since.
-        $key = sprintf('woocommerce-order-%d-%s-%s', $order->get_id(), $order->get_order_key(), substr(sha1($code."\n".(string) json_encode($params)), 0, 16));
+        // Keyed by the invoice it replaces as well as its details, so a replay can never hand back an invoice voided since,
+        // and a retry after a creation whose answer was lost gets that invoice rather than a second one.
+        $key = sprintf('woocommerce-order-%d-%s-%s', $order->get_id(), $order->get_order_key(), substr(sha1($replaced."\n".(string) json_encode($params)), 0, 16));
 
         $invoice = $this->createInvoice($client, $params, $key);
 
@@ -537,15 +547,24 @@ final class Gateway extends WC_Payment_Gateway
     /**
      * Void an invoice the order has outgrown, returning false when it must be kept because a payment to it is on its way.
      *
+     * It is set aside first, since VeliraPay announces the void at once, before the new invoice is remembered; one that
+     * could not be voided is the order's own again. Once voided it stays aside, even if no new invoice can be created.
+     *
+     * @param  array<string, mixed>  $invoice  The invoice as the API last described it.
+     *
      * @throws ApiException when it could not be voided for another reason, so it is not left payable beside a new one.
      */
-    private function voidOutdated(Client $client, WC_Order $order, string $code): bool
+    private function voidOutdated(Client $client, WC_Order $order, string $code, array $invoice): bool
     {
+        WooCommerceOrder::setInvoiceAside($order, $code);
+
         try {
             $client->voidInvoice($code);
 
             return true;
         } catch (ApiException $exception) {
+            WooCommerceOrder::restoreInvoice($order, $code, is_scalar($invoice['hosted_url'] ?? null) ? (string) $invoice['hosted_url'] : '');
+
             if (! $exception->isConflict()) {
                 throw $exception;
             }

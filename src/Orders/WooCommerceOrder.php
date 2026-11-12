@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace VeliraPay\WooCommerce\Orders;
 
+use WC_Meta_Data;
 use WC_Order;
 
 /**
@@ -52,6 +53,27 @@ final class WooCommerceOrder implements Order
     }
 
     /**
+     * Get the codes of the invoices an order used before, oldest first.
+     *
+     * @return list<string>
+     */
+    public static function supersededInvoiceCodesOf(WC_Order $order): array
+    {
+        $codes = [];
+        $rows = $order->get_meta(self::SUPERSEDED_INVOICE_CODE_META, false);
+
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            $code = $row instanceof WC_Meta_Data ? $row->value : null;
+
+            if (is_string($code) && $code !== '' && ! in_array($code, $codes, true)) {
+                $codes[] = $code;
+            }
+        }
+
+        return $codes;
+    }
+
+    /**
      * Remember the invoice created for an order.
      *
      * @param  array<string, mixed>  $invoice
@@ -62,12 +84,38 @@ final class WooCommerceOrder implements Order
         $code = is_scalar($invoice['id'] ?? null) ? (string) $invoice['id'] : '';
 
         // Kept so a payment that still reaches the old invoice is matched to the order rather than ignored.
-        if ($previous !== '' && $previous !== $code) {
+        if ($previous !== '' && $previous !== $code && ! in_array($previous, self::supersededInvoiceCodesOf($order), true)) {
             $order->add_meta_data(self::SUPERSEDED_INVOICE_CODE_META, $previous);
         }
 
         $order->update_meta_data(self::INVOICE_CODE_META, $code);
         $order->update_meta_data(self::INVOICE_URL_META, is_scalar($invoice['hosted_url'] ?? null) ? (string) $invoice['hosted_url'] : '');
+        $order->save();
+    }
+
+    /**
+     * Set the order's invoice aside as one it replaced, before it is voided or replaced: news of its void is then not
+     * taken for the order's own, and polling leaves the order alone until a new invoice is remembered.
+     */
+    public static function setInvoiceAside(WC_Order $order, string $code): void
+    {
+        if (! in_array($code, self::supersededInvoiceCodesOf($order), true)) {
+            $order->add_meta_data(self::SUPERSEDED_INVOICE_CODE_META, $code);
+        }
+
+        $order->delete_meta_data(self::INVOICE_CODE_META);
+        $order->delete_meta_data(self::INVOICE_URL_META);
+        $order->save();
+    }
+
+    /**
+     * Make an invoice set aside the order's own again, after it could not be voided and so stays payable.
+     */
+    public static function restoreInvoice(WC_Order $order, string $code, string $url): void
+    {
+        $order->delete_meta_data_value(self::SUPERSEDED_INVOICE_CODE_META, $code);
+        $order->update_meta_data(self::INVOICE_CODE_META, $code);
+        $order->update_meta_data(self::INVOICE_URL_META, $url);
         $order->save();
     }
 

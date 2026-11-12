@@ -401,7 +401,15 @@ define('WEEK_IN_SECONDS', 604800);
 
 function wc_get_orders(array $args): array
 {
-    $orders = array_filter($GLOBALS['velirapay_test_orders'] ?? [], static fn (WC_Order $order): bool => $order->has_status($args['status']));
+    $orders = array_filter($GLOBALS['velirapay_test_orders'] ?? [], static function (WC_Order $order) use ($args): bool {
+        if (isset($args['meta_key'])) {
+            $values = array_map(static fn (WC_Meta_Data $meta): mixed => $meta->value, $order->get_meta($args['meta_key'], false));
+
+            return in_array($args['meta_value'] ?? null, $values, true);
+        }
+
+        return $order->has_status($args['status']);
+    });
     $result = ($args['return'] ?? null) === 'ids' ? array_keys($orders) : array_values($orders);
 
     return ($args['limit'] ?? -1) === -1 ? $result : array_slice($result, 0, $args['limit']);
