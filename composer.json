@@ -1,6 +1,6 @@
 {
     "name": "velirapay/velirapay-woocommerce",
-    "description": "The official VeliraPay payment gateway for WooCommerce: take Bitcoin, Ethereum, USDC and other coins at checkout.",
+    "description": "Official VeliraPay payment gateway for WooCommerce: accept crypto payments through hosted VeliraPay invoices.",
     "type": "wordpress-plugin",
     "keywords": [
         "velirapay",
@@ -11,7 +11,16 @@
         "payment-gateway",
         "bitcoin",
         "ethereum",
-        "webhooks"
+        "webhooks",
+        "crypto-payments",
+        "cryptocurrency",
+        "litecoin",
+        "solana",
+        "usdc",
+        "usdt",
+        "woocommerce-payment-gateway",
+        "woocommerce-plugin",
+        "wordpress-plugin"
     ],
     "homepage": "https://velirapay.com",
     "license": "GPL-2.0-or-later",
