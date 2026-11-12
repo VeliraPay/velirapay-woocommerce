@@ -78,7 +78,8 @@ The same mapping is applied whether the news comes from a webhook or from pollin
 | `charge.underpaid`, or an open invoice polled with an underpaid charge | **On hold** | The note says what was received against what was due. |
 | `invoice.voided`, or an invoice polled as `void` | **Cancelled** | Unless the order was paid after all, in which case only a note is added. |
 | `charge.expired` | note | The rate lock ran out; the customer can get a new quote on the hosted page. |
-| `charge.late_payment` | note | Funds arrived after the charge expired or was canceled, or after an underpaid charge's rate lock ended, to accept in the dashboard before any refund, or on top of a paid one, which is counted automatically. |
+| `charge.late_payment` on an expired, canceled or underpaid charge | **On hold** | Funds arrived after the charge expired or was canceled, or after an underpaid charge's rate lock ended. They wait for you to accept them in the dashboard, before any refund, so the order is held rather than left pending for the **Hold stock** timer to cancel. Only an order still pending, failed or on hold is moved; a cancelled one gets the note alone. |
+| `charge.late_payment` on a paid charge | note | Funds arrived on top of a paid charge, and are counted automatically once confirmed. |
 | `charge.refunded` | note | A refund you recorded, with the total refunded so far. |
 | `payout.sent`, `payout.confirmed` | note | Your share of the charge went out, and reached your wallet. The plugin does not need them, so they are not among the events to tick. |
 | `charge.created`, `charge.paid`, `charge.canceled`, `invoice.viewed`, anything else | note | |

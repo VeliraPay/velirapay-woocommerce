@@ -164,6 +164,42 @@ final class StatusSyncTest extends TestCase
     }
 
     /**
+     * Charges a late payment can reach without being counted.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function closedOrShortCharges(): iterable
+    {
+        yield 'expired' => ['expired'];
+        yield 'canceled' => ['canceled'];
+        yield 'underpaid' => ['underpaid'];
+    }
+
+    #[DataProvider('closedOrShortCharges')]
+    public function test_a_late_payment_puts_an_order_waiting_for_payment_on_hold(string $chargeStatus): void
+    {
+        foreach (['pending', 'failed', 'on-hold'] as $status) {
+            $order = new FakeOrder($status);
+
+            (new StatusSync)->applyEvent($order, 'charge.late_payment', ['charge' => self::charge($chargeStatus), 'transaction' => ['amount' => '0.001000000000000000']]);
+
+            $this->assertSame('on-hold', $order->status, "A {$status} order");
+            $this->assertCount(1, $order->notes);
+            $this->assertStringStartsWith('A late payment of 0.001 BTC arrived on charge k3v9x2m7q8wz', $order->notes[0]);
+        }
+    }
+
+    public function test_a_late_payment_only_adds_a_note_to_a_cancelled_order(): void
+    {
+        $order = new FakeOrder('cancelled');
+
+        (new StatusSync)->applyEvent($order, 'charge.late_payment', ['charge' => self::charge('expired'), 'transaction' => ['amount' => '0.001000000000000000']]);
+
+        $this->assertSame('cancelled', $order->status);
+        $this->assertCount(1, $order->notes);
+    }
+
+    /**
      * @return iterable<string, array{string, array<string, mixed>, string}>
      */
     public static function noteOnlyEvents(): iterable
@@ -172,7 +208,6 @@ final class StatusSyncTest extends TestCase
         yield 'charge.paid' => ['charge.paid', ['charge' => self::charge('paid', ['received_amount' => '0.002500000000000000'])], 'Charge k3v9x2m7q8wz was paid: 0.0025 BTC received.'];
         yield 'charge.expired' => ['charge.expired', ['charge' => self::charge('expired')], 'Charge k3v9x2m7q8wz expired before it was paid. The customer can get a new quote on the invoice page.'];
         yield 'charge.canceled' => ['charge.canceled', ['charge' => self::charge('canceled')], 'Charge k3v9x2m7q8wz was canceled.'];
-        yield 'charge.late_payment' => ['charge.late_payment', ['charge' => self::charge('expired'), 'transaction' => ['amount' => '0.001000000000000000']], 'A late payment of 0.001 BTC arrived on charge k3v9x2m7q8wz. Accept it in the VeliraPay dashboard; refund it from your wallet after accepting.'];
         yield 'charge.late_payment on a paid charge' => ['charge.late_payment', ['charge' => self::charge('paid'), 'transaction' => ['amount' => '0.001000000000000000']], 'An additional payment of 0.001 BTC arrived on charge k3v9x2m7q8wz; it is added to the charge once confirmed.'];
         yield 'charge.refunded' => ['charge.refunded', ['charge' => self::charge('paid', ['refunded_amount' => '0.000500000000000000'])], 'A refund was recorded on charge k3v9x2m7q8wz: 0.0005 BTC refunded in total.'];
         yield 'payout.sent' => ['payout.sent', ['charge' => self::charge('paid'), 'payout' => ['sent_amount' => '0.002425', 'payout_txid' => 'cc9a3e0b']], 'Your share of charge k3v9x2m7q8wz is on its way: 0.002425 BTC in transaction cc9a3e0b.'];

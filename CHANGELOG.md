@@ -2,6 +2,10 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+- A late payment to an expired, canceled or underpaid charge puts an order still pending, failed or on hold on hold, instead of only noting it, so WooCommerce's **Hold stock** timer no longer cancels the order, and voids its invoice, while the money waits for you to accept it. A cancelled order still only gets the note.
+
 ## 0.3.1 - 2026-11-06
 
 - Retrying an order after changing modes or accounts no longer replaces its existing invoice.

@@ -71,16 +71,21 @@ final class StatusSync
                 __('Charge %s was canceled.', 'velirapay-woocommerce'),
                 $code,
             )),
-            'charge.late_payment' => $order->addNote(sprintf(
-                ($charge['status'] ?? null) === 'paid'
+            'charge.late_payment' => ($charge['status'] ?? null) === 'paid'
+                ? $order->addNote(sprintf(
                     /* translators: 1: amount, 2: coin, 3: charge code */
-                    ? __('An additional payment of %1$s %2$s arrived on charge %3$s; it is added to the charge once confirmed.', 'velirapay-woocommerce')
+                    __('An additional payment of %1$s %2$s arrived on charge %3$s; it is added to the charge once confirmed.', 'velirapay-woocommerce'),
+                    $seen,
+                    $asset,
+                    $code,
+                ))
+                : $this->holdWhileUnpaid($order, sprintf(
                     /* translators: 1: amount, 2: coin, 3: charge code */
-                    : __('A late payment of %1$s %2$s arrived on charge %3$s. Accept it in the VeliraPay dashboard; refund it from your wallet after accepting.', 'velirapay-woocommerce'),
-                $seen,
-                $asset,
-                $code,
-            )),
+                    __('A late payment of %1$s %2$s arrived on charge %3$s. Accept it in the VeliraPay dashboard; refund it from your wallet after accepting.', 'velirapay-woocommerce'),
+                    $seen,
+                    $asset,
+                    $code,
+                )),
             'charge.refunded' => $order->addNote(sprintf(
                 /* translators: 1: charge code, 2: amount, 3: coin */
                 __('A refund was recorded on charge %1$s: %2$s %3$s refunded in total.', 'velirapay-woocommerce'),
@@ -254,6 +259,20 @@ final class StatusSync
         }
 
         $order->setStatus('on-hold', $note);
+    }
+
+    /**
+     * Put an order still waiting for payment on hold, and only note it on any other, a cancelled one included.
+     */
+    private function holdWhileUnpaid(Order $order, string $note): void
+    {
+        if (in_array($order->status(), ['pending', 'failed', 'on-hold'], true)) {
+            $this->hold($order, $note);
+
+            return;
+        }
+
+        $order->addNote($note);
     }
 
     /**
