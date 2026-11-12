@@ -16,6 +16,7 @@ All notable changes to this plugin are documented here. It follows [Semantic Ver
 - An order without a billing email, as one created in the admin may be, is made out to its customer's account email, and one with neither is refused at checkout before VeliraPay is asked, instead of sending VeliraPay an empty email.
 - Voiding a cancelled order's invoice is tried again from WP-Cron, after 1, 5, 15 and 60 minutes, when VeliraPay could not be reached, was busy or failed, instead of leaving the invoice payable after one try; only the last failure is noted. When VeliraPay refuses the void because a short payment, or one still confirming, keeps the invoice payable, a note says so.
 - Trashing or deleting an order still pending, on hold or failed voids its invoice, from WP-Cron so the removal never waits on VeliraPay; before, the invoice stayed payable and a payment to it matched no order.
+- API requests no longer follow redirects, which WordPress would have sent the API key along with to wherever they pointed; a redirect is taken as an error, as the other official libraries do.
 
 ## 0.3.1 - 2026-11-06
 

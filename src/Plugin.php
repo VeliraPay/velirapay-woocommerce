@@ -513,6 +513,9 @@ final class Plugin
     /**
      * Get a transport that sends API requests through the WordPress HTTP API.
      *
+     * A redirect is never followed: WordPress would send it the same headers, the API key among them, wherever it
+     * points, and the client takes the 3xx it answers with as an error, as the other official libraries do.
+     *
      * @return Closure(string, string, array<string, string>, string|null, int): array{status: int, body: string}
      */
     public static function httpTransport(): Closure
@@ -525,6 +528,7 @@ final class Plugin
                 'method' => $method,
                 'headers' => $headers,
                 'timeout' => $timeout,
+                'redirection' => 0,
                 'user-agent' => is_string($userAgent) ? $userAgent : '',
             ];
 

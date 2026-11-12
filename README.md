@@ -60,6 +60,8 @@ When the customer chooses VeliraPay, the plugin creates an invoice with `POST /v
 | `memo` | `Order #1042 at Your Store`. |
 | `send_email` | `false`: the customer is sent straight to the hosted page, so no email is needed. |
 
+Every request to the API goes to `https://api.velirapay.com`, waits at most 15 seconds, and never follows a redirect, so the API key is never sent anywhere else; a redirect is taken as an error.
+
 When VeliraPay refuses the email, because its domain cannot receive mail (a typo, usually), or the amount, the customer is shown its message, such as "Crypto payment: Mail cannot be delivered to this address. Check how it is spelled.", and can correct it; any other failure shows a general notice. Either way the full message is noted on the order and logged.
 
 The request carries the idempotency key `woocommerce-order-<order id>-<order key>-<hash>`, where the hash covers the invoice being replaced and the request details, so a retried checkout gets the same invoice back rather than a second one. The invoice's code and hosted URL are kept in the order's meta (`_velirapay_invoice_code`, `_velirapay_invoice_url`) and noted on the order, the order stays **Pending payment**, and the customer is redirected to the hosted page. There they pick a coin, which locks the exchange rate for 30 minutes, and send the payment.

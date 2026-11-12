@@ -7,6 +7,8 @@ namespace VeliraPay\WooCommerce\Tests;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
+use VeliraPay\WooCommerce\Api\ApiException;
+use VeliraPay\WooCommerce\Api\Client;
 use VeliraPay\WooCommerce\Gateway;
 use VeliraPay\WooCommerce\Orders\WooCommerceOrder;
 use VeliraPay\WooCommerce\Plugin;
@@ -249,6 +251,28 @@ final class PluginTest extends TestCase
         Plugin::voidInvoiceOfCancelledOrder(1042, $order);
 
         $this->assertSame(['The VeliraPay invoice was voided; it can no longer be paid.'], array_column(wc_get_order_notes(['order_id' => 1042]), 'content'));
+    }
+
+    public function test_api_requests_never_follow_a_redirect_with_the_key(): void
+    {
+        $sent = [];
+        $GLOBALS['velirapay_test_http'] = static function (string $url, array $args) use (&$sent): array {
+            $sent[] = $args;
+
+            return ['status' => 302, 'body' => ''];
+        };
+        $client = new Client('vp_live_example', Plugin::httpTransport(), Plugin::userAgent());
+
+        try {
+            $client->retrieveInvoice('invoice1042');
+            $this->fail('No exception was thrown.');
+        } catch (ApiException $exception) {
+            $this->assertSame(302, $exception->status);
+        }
+
+        $this->assertCount(1, $sent);
+        $this->assertSame(0, $sent[0]['redirection'] ?? null);
+        $this->assertSame('Bearer vp_live_example', is_array($sent[0]['headers'] ?? null) ? ($sent[0]['headers']['Authorization'] ?? null) : null);
     }
 
     /**
