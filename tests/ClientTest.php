@@ -74,6 +74,18 @@ final class ClientTest extends TestCase
         $this->assertSame('https://api.velirapay.com/v1/invoices/w7c2h5j9d3kx/void', $this->requests[0]['url']);
     }
 
+    public function test_listing_the_coins_on_offer_asks_in_a_currency_and_can_wait_less(): void
+    {
+        $client = $this->client(200, '{"data":[{"id":"BTC","accepted":true,"minimum_price":"25.00"}],"meta":{"mode":"test","currencies":["USD","TRY"]}}');
+
+        $assets = $client->listAssets('TRY', 3);
+
+        $this->assertSame([['id' => 'BTC', 'accepted' => true, 'minimum_price' => '25.00']], $assets);
+        $this->assertSame('GET', $this->requests[0]['method']);
+        $this->assertSame('https://api.velirapay.com/v1/assets?currency=TRY', $this->requests[0]['url']);
+        $this->assertSame(3, $this->requests[0]['timeout']);
+    }
+
     public function test_an_empty_code_is_refused_before_any_request(): void
     {
         $this->expectException(InvalidArgumentException::class);

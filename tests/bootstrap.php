@@ -59,11 +59,16 @@ if (! class_exists('WP_User')) {
 if (! class_exists('WC_Cart')) {
     class WC_Cart
     {
-        public function __construct(private string $total = '0') {}
+        private string $total = '0';
 
         public function get_total(string $context = 'view'): string
         {
             return $this->total;
+        }
+
+        public function set_total(string $value): void
+        {
+            $this->total = $value;
         }
     }
 }

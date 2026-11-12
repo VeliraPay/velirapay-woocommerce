@@ -108,14 +108,29 @@ final class Client
     }
 
     /**
+     * List the coins on offer in the key's mode, priced in a currency: whether the account takes each, and the lowest
+     * price each can be charged at.
+     *
+     * @param  int  $timeout  How many seconds to wait, shorter than usual where a page is waiting.
+     * @return array<array-key, mixed>
+     *
+     * @throws ApiException
+     */
+    public function listAssets(string $currency, int $timeout = self::TIMEOUT): array
+    {
+        return $this->request('GET', 'assets?currency='.rawurlencode($currency), timeout: $timeout);
+    }
+
+    /**
      * Send a request and return the object the API answered with.
      *
      * @param  array<string, mixed>|null  $body
+     * @param  int  $timeout  How many seconds the request may take.
      * @return array<string, mixed>
      *
      * @throws ApiException
      */
-    public function request(string $method, string $path, ?array $body = null, ?string $idempotencyKey = null): array
+    public function request(string $method, string $path, ?array $body = null, ?string $idempotencyKey = null, int $timeout = self::TIMEOUT): array
     {
         $headers = [
             'Authorization' => 'Bearer '.$this->apiKey,
@@ -135,7 +150,7 @@ final class Client
         }
 
         $url = rtrim($this->baseUrl, '/').'/v1/'.ltrim($path, '/');
-        $response = ($this->transport)($method, $url, $headers, $encoded, self::TIMEOUT);
+        $response = ($this->transport)($method, $url, $headers, $encoded, $timeout);
 
         $decoded = json_decode($response['body'], true);
         $decoded = is_array($decoded) ? $decoded : [];

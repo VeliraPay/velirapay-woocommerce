@@ -44,6 +44,10 @@ Live and test mode each need their own key and endpoint: switch the dashboard to
 
 USD, EUR, GBP, CAD, AUD, CHF and TRY. With any other store currency the gateway is not offered at checkout and a notice says so.
 
+= Is there a smallest order? =
+
+Yes. VeliraPay takes no payment under the currency's lowest price, about half a dollar: 0.50 USD, EUR, GBP or CHF, 0.70 CAD, 0.80 AUD or 25.00 TRY. Below it, or when no coin your account takes can be paid for the total, the method is not offered at checkout.
+
 = Which coins can customers pay in? =
 
 Every coin your VeliraPay account takes, which needs a payout address for its network under Payment settings in the dashboard. USDT and USDC on Ethereum start at 10 of the token, so a smaller order simply does not offer them. See https://velirapay.com/docs/assets for the list.

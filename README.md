@@ -21,7 +21,7 @@ The official WooCommerce plugin for [VeliraPay](https://velirapay.com), the cryp
 - WordPress 6.4 or later
 - WooCommerce 8.3 or later, with the classic or the block checkout, on the posts table or on High-Performance Order Storage
 - PHP 8.1 or later
-- A store currency VeliraPay can bill in: USD, EUR, GBP, CAD, AUD, CHF or TRY
+- A store currency VeliraPay can bill in: USD, EUR, GBP, CAD, AUD, CHF or TRY. VeliraPay takes no payment under the currency's lowest price, about half a dollar: 0.50 USD, EUR, GBP or CHF, 0.70 CAD, 0.80 AUD or 25.00 TRY.
 
 ## Installation
 
@@ -47,6 +47,8 @@ Each mode has its own keys and endpoints, so do the dashboard steps once in live
 ## How orders map to invoices
 
 A store does not know which coin a customer wants to pay in, and a charge needs its coin up front, so an order becomes an invoice, whose hosted page lets the customer pick. USDT and USDC on Ethereum start at 10 of the token, so a smaller order simply does not offer them there.
+
+At checkout, and on the page where a customer pays for an existing order, the method is only offered when the total reaches the currency's lowest price (`Gateway::LOWEST_PRICES`, the same as VeliraPay's) and a coin the account takes can be paid for that much. The plugin asks `GET /v1/assets?currency=…` which coins the account takes and the lowest price of each, waits at most three seconds for the answer, and remembers it for ten minutes, or a failure to get it for three, falling back on the currency's lowest price meanwhile. On the block checkout the method is also left out as soon as a coupon or a removed item takes the total below that amount. Outside the storefront, in the admin, REST requests and cron, nothing is asked.
 
 When the customer chooses VeliraPay, the plugin creates an invoice with `POST /v1/invoices`:
 

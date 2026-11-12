@@ -10,6 +10,7 @@ use VeliraPay\WooCommerce\Orders\StatusSync;
 use VeliraPay\WooCommerce\Orders\WooCommerceOrder;
 use VeliraPay\WooCommerce\Webhooks\Signature;
 use WC_Admin_Settings;
+use WC_Cart;
 use WC_Order;
 use WC_Payment_Gateway;
 
@@ -29,9 +30,29 @@ final class Gateway extends WC_Payment_Gateway
     public const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'TRY'];
 
     /**
+     * The lowest price VeliraPay takes in each currency, about half a dollar, below which a payment is mostly network fees.
+     */
+    public const LOWEST_PRICES = ['USD' => '0.50', 'EUR' => '0.50', 'GBP' => '0.50', 'CAD' => '0.70', 'AUD' => '0.80', 'CHF' => '0.50', 'TRY' => '25.00'];
+
+    /**
      * The prefix of an endpoint's signing secret.
      */
     private const SECRET_PREFIX = 'whsec_';
+
+    /**
+     * How many seconds the coins on offer are remembered for.
+     */
+    private const ASSETS_CACHE_SECONDS = 600;
+
+    /**
+     * How many seconds a failure to read the coins on offer is remembered for, falling back on the lowest prices meanwhile.
+     */
+    private const ASSETS_FAILURE_SECONDS = 180;
+
+    /**
+     * How many seconds a checkout waits for the coins on offer.
+     */
+    private const ASSETS_TIMEOUT = 3;
 
     /**
      * Set the gateway up from its saved settings.
@@ -190,13 +211,57 @@ final class Gateway extends WC_Payment_Gateway
     }
 
     /**
-     * Offer the gateway only when it can create invoices for the store's currency.
+     * Offer the gateway only when it can create invoices for the store's currency, and, at checkout, when the total
+     * reaches the currency's lowest price and a coin the account takes can pay it.
      */
     public function is_available(): bool
     {
-        return parent::is_available()
-            && $this->apiKey() !== ''
-            && in_array(get_woocommerce_currency(), self::CURRENCIES, true);
+        if (! parent::is_available() || $this->apiKey() === '' || ! in_array(get_woocommerce_currency(), self::CURRENCIES, true)) {
+            return false;
+        }
+
+        $due = $this->amountDue();
+
+        if ($due === null || self::cents($due['amount']) <= 0) {
+            return true;
+        }
+
+        $lowest = $this->lowestPayableAmount($due['currency']);
+
+        return $lowest !== null && self::cents($due['amount']) >= self::cents($lowest);
+    }
+
+    /**
+     * Get the smallest total a customer can pay in a currency, such as "0.50": its lowest price, raised to the cheapest
+     * coin the account takes when VeliraPay can say, or null when it bills in no such currency or the account takes no coin.
+     */
+    public function lowestPayableAmount(string $currency): ?string
+    {
+        $lowest = self::LOWEST_PRICES[$currency] ?? null;
+
+        if ($lowest === null) {
+            return null;
+        }
+
+        $assets = $this->assetsFor($currency);
+
+        if ($assets === null) {
+            return $lowest;
+        }
+
+        $cheapest = null;
+
+        foreach ($assets as $asset) {
+            if ($asset['accepted'] === false) {
+                continue;
+            }
+
+            // A coin with a minimum of its own has no price while it cannot be priced, which is no reason to hide it.
+            $price = max(self::cents($lowest), $asset['minimum_price'] === null ? 0 : self::cents($asset['minimum_price']));
+            $cheapest = $cheapest === null ? $price : min($cheapest, $price);
+        }
+
+        return $cheapest === null ? null : number_format($cheapest / 100, 2, '.', '');
     }
 
     /**
@@ -286,6 +351,99 @@ final class Gateway extends WC_Payment_Gateway
     public function webhookUrl(): string
     {
         return WC()->api_request_url(self::ID);
+    }
+
+    /**
+     * Get what the customer is about to pay: the order on the order-pay page, the cart at checkout, or null anywhere else.
+     *
+     * @return array{amount: string, currency: string}|null
+     */
+    private function amountDue(): ?array
+    {
+        $orderPay = get_query_var('order-pay');
+        $orderId = is_numeric($orderPay) ? (int) $orderPay : 0;
+
+        if ($orderId > 0) {
+            $order = wc_get_order($orderId);
+
+            return $order instanceof WC_Order ? ['amount' => (string) $order->get_total(), 'currency' => $order->get_currency()] : null;
+        }
+
+        // WooCommerce only loads a cart on the storefront, whatever its property's type says: not in the admin, REST or cron.
+        $cart = get_object_vars(WC())['cart'] ?? null;
+
+        return $cart instanceof WC_Cart ? ['amount' => (string) $cart->get_total('edit'), 'currency' => get_woocommerce_currency()] : null;
+    }
+
+    /**
+     * Get the coins on offer in a currency, whether the account takes each and the lowest price each can be paid at,
+     * remembered for ten minutes, or null while VeliraPay cannot be asked.
+     *
+     * @return list<array{accepted: bool|null, minimum_price: string|null}>|null
+     */
+    private function assetsFor(string $currency): ?array
+    {
+        $client = $this->client();
+
+        if ($client === null) {
+            return null;
+        }
+
+        // Keyed by the key itself, since which coins are taken depends on its account.
+        $cacheKey = 'velirapay_assets_'.substr(hash('sha256', $this->apiKey()), 0, 16).'_'.$currency;
+        $cached = get_transient($cacheKey);
+
+        if ($cached === 'unavailable') {
+            return null;
+        }
+
+        if (is_array($cached)) {
+            return self::payableCoins($cached);
+        }
+
+        try {
+            $assets = self::payableCoins($client->listAssets($currency, self::ASSETS_TIMEOUT));
+        } catch (ApiException) {
+            set_transient($cacheKey, 'unavailable', self::ASSETS_FAILURE_SECONDS);
+
+            return null;
+        }
+
+        set_transient($cacheKey, $assets, self::ASSETS_CACHE_SECONDS);
+
+        return $assets;
+    }
+
+    /**
+     * Keep what a checkout needs to know of each coin: whether the account takes it, and the lowest price it can be paid at.
+     *
+     * @param  array<array-key, mixed>  $assets
+     * @return list<array{accepted: bool|null, minimum_price: string|null}>
+     */
+    private static function payableCoins(array $assets): array
+    {
+        $coins = [];
+
+        foreach ($assets as $asset) {
+            if (is_array($asset)) {
+                $minimum = $asset['minimum_price'] ?? null;
+
+                $coins[] = [
+                    'accepted' => is_bool($asset['accepted'] ?? null) ? $asset['accepted'] : null,
+                    'minimum_price' => is_string($minimum) && is_numeric($minimum) ? $minimum : null,
+                ];
+            }
+        }
+
+        return $coins;
+    }
+
+    /**
+     * Get an amount in hundredths, such as 4990 for "49.90".
+     */
+    private static function cents(string $amount): int
+    {
+        return is_numeric($amount) ? (int) round((float) $amount * 100) : 0;
     }
 
     /**

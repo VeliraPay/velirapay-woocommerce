@@ -68,19 +68,23 @@ final class PaymentMethod extends AbstractPaymentMethodType
     }
 
     /**
-     * Get what the script shows: the title, description and icon from the settings.
+     * Get what the script shows, the title, description and icon from the settings, and the smallest total it offers
+     * the method for as the cart changes.
      *
      * @return array<string, mixed>
      */
     public function get_payment_method_data(): array
     {
         $gateway = Plugin::gateway();
+        $currency = get_woocommerce_currency();
 
         return [
             'title' => $gateway->get_title(),
             'description' => $gateway->get_description(),
             'icon' => Plugin::url('assets/icon.svg'),
             'supports' => ['products'],
+            'currency' => $currency,
+            'lowestAmount' => $gateway->lowestPayableAmount($currency) ?? '',
         ];
     }
 }
