@@ -56,9 +56,35 @@ jobs:
       - name: Check code style
         run: vendor/bin/pint --test
 
+  plugin-check:
+    name: Plugin Check
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the plugin
+        run: |
+          zip=$(bash bin/build.sh)
+          unzip -q "${zip}" -d build
+
+      - name: Run Plugin Check
+        uses: WordPress/plugin-check-action@10857da14b6c2246d15402b3e69f777edcf8c12e # v1.1.9
+        with:
+          build-dir: build/velirapay-for-woocommerce
+          slug: velirapay-for-woocommerce
+          # An empty token skips the pull request comment, which this job's read-only token could not post.
+          repo-token: ''
+
   release:
     name: Release the plugin zip
-    needs: checks
+    needs: [checks, plugin-check]
     runs-on: ubuntu-latest
 
     permissions:
