@@ -18,6 +18,8 @@ if (! class_exists('WC_Payment_Gateway')) {
     {
         public array $settings = [];
 
+        public string $enabled = 'yes';
+
         public function get_option(string $key): string
         {
             return $this->settings[$key] ?? '';
@@ -27,19 +29,72 @@ if (! class_exists('WC_Payment_Gateway')) {
         {
             return 'https://store.example/order-received/'.$order->get_id();
         }
+
+        public function is_available(): bool
+        {
+            return $this->enabled === 'yes';
+        }
+    }
+}
+
+if (! class_exists('WC_Meta_Data')) {
+    class WC_Meta_Data
+    {
+        public function __construct(private array $meta = []) {}
+
+        public function __get(string $key): mixed
+        {
+            return $this->meta[$key] ?? null;
+        }
+    }
+}
+
+if (! class_exists('WP_User')) {
+    class WP_User
+    {
+        public string $user_email = '';
+    }
+}
+
+if (! class_exists('WC_Cart')) {
+    class WC_Cart
+    {
+        public function __construct(private string $total = '0') {}
+
+        public function get_total(string $context = 'view'): string
+        {
+            return $this->total;
+        }
     }
 }
 
 if (! class_exists('WC_Order')) {
     class WC_Order
     {
+        /**
+         * Every meta key's values, in the order they were added, as WooCommerce keeps several rows under one key.
+         */
         private array $meta = [];
 
         private string $status = 'pending';
 
         private string $total = '49.90';
 
+        private string $currency = 'EUR';
+
+        private string $billingEmail = 'grace@example.com';
+
+        private int $customerId = 0;
+
+        private string $createdVia = 'checkout';
+
+        private ?DateTime $dateCreated = null;
+
         private ?DateTime $datePaid = null;
+
+        private string $transactionId = '';
+
+        public array $notes = [];
 
         public function __construct(private int $id = 0) {}
 
@@ -65,7 +120,22 @@ if (! class_exists('WC_Order')) {
 
         public function get_billing_email(): string
         {
-            return 'grace@example.com';
+            return $this->billingEmail;
+        }
+
+        public function set_billing_email(string $email): void
+        {
+            $this->billingEmail = $email;
+        }
+
+        public function get_customer_id(): int
+        {
+            return $this->customerId;
+        }
+
+        public function set_customer_id(int $id): void
+        {
+            $this->customerId = $id;
         }
 
         public function get_total(): string
@@ -73,19 +143,79 @@ if (! class_exists('WC_Order')) {
             return $this->total;
         }
 
-        public function get_currency(): string
+        public function set_total(string $total): void
         {
-            return 'EUR';
+            $this->total = $total;
         }
 
-        public function get_meta(string $key): mixed
+        public function get_currency(): string
         {
-            return $this->meta[$key] ?? '';
+            return $this->currency;
+        }
+
+        public function set_currency(string $currency): void
+        {
+            $this->currency = $currency;
+        }
+
+        public function get_created_via(): string
+        {
+            return $this->createdVia;
+        }
+
+        public function set_created_via(string $value): void
+        {
+            $this->createdVia = $value;
+        }
+
+        public function get_date_created(): ?DateTime
+        {
+            return $this->dateCreated;
+        }
+
+        public function set_date_created(string $value): void
+        {
+            $this->dateCreated = new DateTime($value);
+        }
+
+        public function get_meta(string $key = '', bool $single = true): mixed
+        {
+            $values = $this->meta[$key] ?? [];
+
+            if ($single) {
+                return $values === [] ? '' : $values[0];
+            }
+
+            return array_map(static fn (mixed $value): WC_Meta_Data => new WC_Meta_Data(['key' => $key, 'value' => $value]), $values);
         }
 
         public function update_meta_data(string $key, mixed $value): void
         {
-            $this->meta[$key] = $value;
+            $this->meta[$key] = [$value];
+        }
+
+        public function add_meta_data(string $key, mixed $value, bool $unique = false): void
+        {
+            $this->meta[$key][] = $value;
+        }
+
+        public function delete_meta_data(string $key): void
+        {
+            unset($this->meta[$key]);
+        }
+
+        public function delete_meta_data_value(string $key, mixed $value): void
+        {
+            $this->meta[$key] = array_values(array_filter($this->meta[$key] ?? [], static fn (mixed $kept): bool => $kept !== $value));
+
+            if ($this->meta[$key] === []) {
+                unset($this->meta[$key]);
+            }
+        }
+
+        public function save(): int
+        {
+            return $this->id;
         }
 
         public function get_status(): string
@@ -98,14 +228,34 @@ if (! class_exists('WC_Order')) {
             $this->status = $status;
         }
 
-        public function update_status(string $status, string $note): void
+        public function update_status(string $status, string $note = ''): bool
         {
             $this->status = $status;
+
+            if ($note !== '') {
+                $this->notes[] = $note;
+            }
+
+            return true;
         }
 
-        public function payment_complete(string $transactionId): void
+        // As WooCommerce does: only an order waiting for payment, or a cancelled one, is moved on, and it gets a payment date.
+        public function payment_complete(string $transactionId = ''): bool
         {
+            if (! in_array($this->status, ['on-hold', 'pending', 'failed', 'cancelled'], true)) {
+                return false;
+            }
+
+            $this->transactionId = $transactionId;
+            $this->datePaid ??= new DateTime;
             $this->status = 'processing';
+
+            return true;
+        }
+
+        public function get_transaction_id(): string
+        {
+            return $this->transactionId;
         }
 
         public function has_status(string|array $status): bool
@@ -133,7 +283,12 @@ if (! class_exists('WC_Order')) {
             $this->datePaid = new DateTime($value);
         }
 
-        public function add_order_note(string $note): void {}
+        public function add_order_note(string $note): int
+        {
+            $this->notes[] = $note;
+
+            return count($this->notes);
+        }
     }
 }
 
@@ -147,7 +302,10 @@ function wc_format_decimal(string $value, int $decimals): string
     return number_format((float) $value, $decimals, '.', '');
 }
 
-function wc_add_notice(string $message, string $type): void {}
+function wc_add_notice(string $message, string $type): void
+{
+    $GLOBALS['velirapay_test_notices'][] = [$type, $message];
+}
 
 function get_bloginfo(string $show): string
 {
@@ -159,11 +317,24 @@ function wp_specialchars_decode(string $text, int $quoteStyle): string
     return html_entity_decode($text, $quoteStyle);
 }
 
+function esc_html(string $text): string
+{
+    return htmlspecialchars($text, ENT_QUOTES);
+}
+
 function wc_get_logger(): object
 {
     return new class
     {
-        public function error(string $message, array $context): void {}
+        public function error(string $message, array $context): void
+        {
+            $GLOBALS['velirapay_test_logs'][] = $message;
+        }
+
+        public function warning(string $message, array $context): void
+        {
+            $GLOBALS['velirapay_test_logs'][] = $message;
+        }
     };
 }
 
@@ -172,9 +343,26 @@ function wp_remote_request(string $url, array $args): array
     return ($GLOBALS['velirapay_test_http'])($url, $args);
 }
 
+function wp_remote_get(string $url, array $args): array
+{
+    return ($GLOBALS['velirapay_test_http'])($url, $args);
+}
+
 function is_wp_error(mixed $value): bool
 {
-    return false;
+    return $value instanceof WP_Error;
+}
+
+if (! class_exists('WP_Error')) {
+    class WP_Error
+    {
+        public function __construct(private string $message = '') {}
+
+        public function get_error_message(): string
+        {
+            return $this->message;
+        }
+    }
 }
 
 function wp_remote_retrieve_response_code(array $response): int
@@ -188,7 +376,9 @@ function wp_remote_retrieve_body(array $response): string
 }
 
 define('DAY_IN_SECONDS', 86400);
+define('HOUR_IN_SECONDS', 3600);
 define('MINUTE_IN_SECONDS', 60);
+define('WEEK_IN_SECONDS', 604800);
 
 function wc_get_orders(array $args): array
 {
@@ -202,6 +392,13 @@ function WC(): object
 {
     return new class
     {
+        public ?WC_Cart $cart;
+
+        public function __construct()
+        {
+            $this->cart = $GLOBALS['velirapay_test_cart'] ?? null;
+        }
+
         public function payment_gateways(): object
         {
             return new class
@@ -212,7 +409,32 @@ function WC(): object
                 }
             };
         }
+
+        public function api_request_url(string $request, ?bool $ssl = null): string
+        {
+            return ($ssl === true ? 'https' : 'http').'://store.example/wc-api/'.$request.'/';
+        }
     };
+}
+
+function get_woocommerce_currency(): string
+{
+    return $GLOBALS['velirapay_test_currency'] ?? 'EUR';
+}
+
+function get_query_var(string $name, mixed $default = ''): mixed
+{
+    return $GLOBALS['velirapay_test_query_vars'][$name] ?? $default;
+}
+
+function absint(mixed $value): int
+{
+    return abs((int) $value);
+}
+
+function get_userdata(int $id): WP_User|false
+{
+    return $GLOBALS['velirapay_test_users'][$id] ?? false;
 }
 
 function get_option(string $name, mixed $default = false): mixed
@@ -234,14 +456,46 @@ function delete_option(string $name): bool
     return true;
 }
 
-function wp_next_scheduled(string $hook): int|false
+function get_transient(string $name): mixed
+{
+    return $GLOBALS['velirapay_test_transients'][$name] ?? false;
+}
+
+function set_transient(string $name, mixed $value, int $expiration = 0): bool
+{
+    $GLOBALS['velirapay_test_transients'][$name] = $value;
+
+    return true;
+}
+
+function delete_transient(string $name): bool
+{
+    unset($GLOBALS['velirapay_test_transients'][$name]);
+
+    return true;
+}
+
+function get_site_transient(string $name): mixed
+{
+    return $GLOBALS['velirapay_test_transients'][$name] ?? false;
+}
+
+function set_site_transient(string $name, mixed $value, int $expiration = 0): bool
+{
+    $GLOBALS['velirapay_test_transients'][$name] = $value;
+
+    return true;
+}
+
+function wp_next_scheduled(string $hook, array $args = []): int|false
 {
     return $GLOBALS['velirapay_test_schedule'][$hook] ?? false;
 }
 
-function wp_schedule_single_event(int $timestamp, string $hook): bool
+function wp_schedule_single_event(int $timestamp, string $hook, array $args = []): bool
 {
     $GLOBALS['velirapay_test_schedule'][$hook] = $timestamp;
+    $GLOBALS['velirapay_test_events'][] = [$timestamp, $hook, $args];
 
     return true;
 }

@@ -31,6 +31,11 @@ final class FakeOrder implements Order
     public ?string $transactionId = null;
 
     /**
+     * Whether a payment date was recorded, as WooCommerce does when it takes a payment.
+     */
+    public bool $hasPaymentDate = false;
+
+    /**
      * Create an order in a status, for a total.
      */
     public function __construct(public string $status = 'pending', public string $total = '49.90', public string $currency = 'EUR') {}
@@ -64,17 +69,22 @@ final class FakeOrder implements Order
      */
     public function isPaid(): bool
     {
-        return in_array($this->status, ['processing', 'completed'], true);
+        return in_array($this->status, ['processing', 'completed', 'refunded'], true) || $this->hasPaymentDate;
     }
 
     /**
-     * {@inheritDoc}
+     * Record the payment as WooCommerce's payment_complete() does: only an order waiting for payment, or a cancelled
+     * one, is moved on.
      */
     public function markPaid(string $transactionId, string $note): void
     {
-        $this->transactionId = $transactionId;
-        $this->status = 'processing';
         $this->notes[] = $note;
+
+        if (in_array($this->status, ['on-hold', 'pending', 'failed', 'cancelled'], true)) {
+            $this->transactionId = $transactionId;
+            $this->hasPaymentDate = true;
+            $this->status = 'processing';
+        }
     }
 
     /**
