@@ -14,6 +14,7 @@ All notable changes to this plugin are documented here. It follows [Semantic Ver
 - An order put on hold by a payment seen on chain that never confirmed goes back to **Pending payment** when VeliraPay closes the charge with no transfer left, instead of staying on hold indefinitely. An order held for any other reason as well stays on hold.
 - When VeliraPay refuses the customer's email, whose domain cannot receive mail, or the amount, the checkout shows its message, such as "Crypto payment: Mail cannot be delivered to this address. Check how it is spelled.", instead of a general notice the customer could do nothing about.
 - An order without a billing email, as one created in the admin may be, is made out to its customer's account email, and one with neither is refused at checkout before VeliraPay is asked, instead of sending VeliraPay an empty email.
+- Voiding a cancelled order's invoice is tried again from WP-Cron, after 1, 5, 15 and 60 minutes, when VeliraPay could not be reached, was busy or failed, instead of leaving the invoice payable after one try; only the last failure is noted. When VeliraPay refuses the void because a short payment, or one still confirming, keeps the invoice payable, a note says so.
 
 ## 0.3.1 - 2026-11-06
 

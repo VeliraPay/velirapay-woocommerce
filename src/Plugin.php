@@ -9,6 +9,7 @@ use Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry;
 use Automattic\WooCommerce\Utilities\FeaturesUtil;
 use Closure;
 use VeliraPay\WooCommerce\Api\ApiException;
+use VeliraPay\WooCommerce\Api\Client;
 use VeliraPay\WooCommerce\Blocks\PaymentMethod;
 use VeliraPay\WooCommerce\Orders\StatusSync;
 use VeliraPay\WooCommerce\Orders\WooCommerceOrder;
@@ -40,6 +41,16 @@ final class Plugin
      * The option holding the remaining order IDs in the snapshot.
      */
     private const SYNC_QUEUE_OPTION = 'velirapay_sync_order_ids';
+
+    /**
+     * The WP-Cron hook that voids an invoice again, given the order ID, the invoice code and the attempt.
+     */
+    public const VOID_HOOK = 'velirapay_void_invoice';
+
+    /**
+     * How many minutes pass before each new attempt at a void that failed for a reason that may clear up.
+     */
+    private const VOID_RETRY_MINUTES = [1, 5, 15, 60];
 
     /**
      * The order action that polls one order from its edit screen.
@@ -111,6 +122,7 @@ final class Plugin
         add_filter('woocommerce_payment_gateways', [self::class, 'registerGateway']);
         add_action('woocommerce_api_'.Gateway::ID, [self::class, 'receiveWebhook']);
         add_action('woocommerce_order_status_cancelled', [self::class, 'voidInvoiceOfCancelledOrder'], 10, 2);
+        add_action(self::VOID_HOOK, [self::class, 'retryVoid'], 10, 3);
         add_filter('woocommerce_cancel_unpaid_order', [self::class, 'keepOrderBeingPaid'], 10, 2);
         add_filter('woocommerce_order_actions', [self::class, 'addOrderAction'], 10, 2);
         add_action('woocommerce_order_action_'.self::CHECK_STATUS_ACTION, [self::class, 'checkStatus']);
@@ -128,6 +140,8 @@ final class Plugin
     {
         wp_clear_scheduled_hook(self::SYNC_HOOK);
         wp_clear_scheduled_hook(self::SYNC_BATCH_HOOK);
+        // Each of these carries its own arguments, which wp_clear_scheduled_hook() would have to name.
+        wp_unschedule_hook(self::VOID_HOOK);
         delete_option(self::SYNC_QUEUE_OPTION);
     }
 
@@ -193,25 +207,29 @@ final class Plugin
         }
 
         $code = WooCommerceOrder::invoiceCodeOf($order);
-        $client = self::gateway()->client();
 
-        if ($code === '' || $client === null) {
+        if ($code !== '') {
+            self::voidInvoice($order->get_id(), $code, $order, 1);
+        }
+    }
+
+    /**
+     * Try again to void an invoice VeliraPay could not be reached to void, from WP-Cron, while its order is still
+     * cancelled, or trashed, and still names it; an order deleted since can no longer be asked, so its invoice is voided.
+     */
+    public static function retryVoid(mixed $orderId, mixed $code, mixed $attempt): void
+    {
+        if (! is_int($orderId) || ! is_string($code) || $code === '' || ! is_int($attempt)) {
             return;
         }
 
-        try {
-            $client->voidInvoice($code);
-            $order->add_order_note(__('The VeliraPay invoice was voided; it can no longer be paid.', 'velirapay-woocommerce'));
-        } catch (ApiException $exception) {
-            // A 409 means the invoice was already paid or voided, or has a payment on its way, which VeliraPay reports on its own.
-            if (! $exception->isConflict()) {
-                $order->add_order_note(sprintf(
-                    /* translators: %s: error message */
-                    __('The VeliraPay invoice could not be voided: %s', 'velirapay-woocommerce'),
-                    $exception->getMessage(),
-                ));
-            }
+        $order = wc_get_order($orderId);
+
+        if ($order instanceof WC_Order && (! $order->has_status(['cancelled', 'trash']) || WooCommerceOrder::invoiceCodeOf($order) !== $code)) {
+            return;
         }
+
+        self::voidInvoice($orderId, $code, $order instanceof WC_Order ? $order : null, $attempt);
     }
 
     /**
@@ -520,6 +538,87 @@ final class Plugin
         (new StatusSync)->applyInvoice(new WooCommerceOrder($order), $invoice);
 
         return $invoice;
+    }
+
+    /**
+     * Void an order's invoice with the current mode's key, trying again from WP-Cron when VeliraPay could not be reached,
+     * was busy or failed, and noting the outcome on the order, or in the log once the order is gone.
+     */
+    private static function voidInvoice(int $orderId, string $code, ?WC_Order $order, int $attempt): void
+    {
+        $client = self::gateway()->client();
+
+        if ($client === null) {
+            return;
+        }
+
+        try {
+            $client->voidInvoice($code);
+            self::noteVoid($order, $code, __('The VeliraPay invoice was voided; it can no longer be paid.', 'velirapay-woocommerce'));
+
+            return;
+        } catch (ApiException $exception) {
+            if ($exception->isConflict()) {
+                self::explainUnvoidable($client, $order, $code);
+
+                return;
+            }
+
+            $delay = self::VOID_RETRY_MINUTES[$attempt - 1] ?? null;
+
+            if (self::isTemporary($exception) && $delay !== null) {
+                wp_schedule_single_event(time() + $delay * MINUTE_IN_SECONDS, self::VOID_HOOK, [$orderId, $code, $attempt + 1]);
+
+                return;
+            }
+
+            self::noteVoid($order, $code, $exception->isNotFound()
+                ? sprintf(
+                    /* translators: %s: invoice code */
+                    __('VeliraPay invoice %s could not be voided with the current API key: it belongs to the other mode or another account. Void it in the VeliraPay dashboard.', 'velirapay-woocommerce'),
+                    $code,
+                )
+                : sprintf(
+                    /* translators: %s: error message */
+                    __('The VeliraPay invoice could not be voided: %s', 'velirapay-woocommerce'),
+                    $exception->getMessage(),
+                ));
+        }
+    }
+
+    /**
+     * Say why an invoice VeliraPay refused to void stays payable. A paid or voided one needs nothing said, since
+     * VeliraPay reports on it; an open one has a short payment, or one still confirming.
+     */
+    private static function explainUnvoidable(Client $client, ?WC_Order $order, string $code): void
+    {
+        try {
+            $invoice = $client->retrieveInvoice($code);
+        } catch (ApiException) {
+            return;
+        }
+
+        if (($invoice['status'] ?? null) === 'open') {
+            self::noteVoid($order, $code, sprintf(
+                /* translators: %s: invoice code */
+                __('VeliraPay invoice %s could not be voided: a short payment, or one still confirming, keeps it payable. Check it in the VeliraPay dashboard, where a short payment has to be accepted before it can be refunded.', 'velirapay-woocommerce'),
+                $code,
+            ));
+        }
+    }
+
+    /**
+     * Note what became of an invoice's void on its order, or log it once the order was deleted.
+     */
+    private static function noteVoid(?WC_Order $order, string $code, string $note): void
+    {
+        if ($order instanceof WC_Order) {
+            $order->add_order_note($note);
+
+            return;
+        }
+
+        wc_get_logger()->warning(sprintf('Invoice %s of a deleted order: %s', $code, $note), ['source' => self::LOG_SOURCE]);
     }
 
     /**

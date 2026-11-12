@@ -28,6 +28,13 @@ final class PluginTest extends TestCase
      */
     private array $orders = [];
 
+    /**
+     * The method and path of each request the routing HTTP double answered.
+     *
+     * @var list<string>
+     */
+    private array $sent = [];
+
     public function test_polling_continues_past_fifty_orders_without_skipping_failed_or_changed_orders(): void
     {
         $orders = [];
@@ -158,6 +165,92 @@ final class PluginTest extends TestCase
         $this->assertSame([], $this->requests);
     }
 
+    public function test_a_void_that_cannot_reach_the_api_is_tried_again_from_wp_cron_and_noted_only_when_it_gives_up(): void
+    {
+        $order = $this->pendingOrder();
+        $order->set_status('cancelled');
+        $this->route(['POST invoices/invoice1042/void' => [503, '{"message":"Service Unavailable"}']]);
+
+        Plugin::voidInvoiceOfCancelledOrder(1042, $order);
+
+        foreach ([2 => 1, 3 => 5, 4 => 15, 5 => 60] as $attempt => $minutes) {
+            $at = wp_next_scheduled(Plugin::VOID_HOOK, [1042, 'invoice1042', $attempt]);
+            $this->assertIsInt($at, "Attempt {$attempt}");
+            $this->assertEqualsWithDelta(time() + $minutes * 60, $at, 5);
+            $this->assertSame([], wc_get_order_notes(['order_id' => 1042]));
+
+            Plugin::retryVoid(1042, 'invoice1042', $attempt);
+        }
+
+        $this->assertCount(5, $this->sent);
+        $this->assertFalse(wp_next_scheduled(Plugin::VOID_HOOK, [1042, 'invoice1042', 6]));
+        $this->assertSame(['The VeliraPay invoice could not be voided: Service Unavailable'], array_column(wc_get_order_notes(['order_id' => 1042]), 'content'));
+    }
+
+    public function test_a_retried_void_is_dropped_once_the_order_is_no_longer_cancelled_or_has_another_invoice(): void
+    {
+        $order = $this->pendingOrder();
+        $this->route([]);
+
+        Plugin::retryVoid(1042, 'invoice1042', 2);
+        $order->set_status('cancelled');
+        Plugin::retryVoid(1042, 'otherinvoice', 2);
+
+        $this->assertSame([], $this->sent);
+    }
+
+    public function test_a_void_refused_because_a_payment_keeps_the_invoice_payable_says_so(): void
+    {
+        $order = $this->pendingOrder();
+        $order->set_status('cancelled');
+        $this->route([
+            'POST invoices/invoice1042/void' => [409, '{"message":"Only open invoices without a payment on its way can be voided."}'],
+            'GET invoices/invoice1042' => [200, '{"data":{"id":"invoice1042","status":"open","charges":[{"id":"k3v9x2m7q8wz","status":"underpaid","asset":"BTC"}]}}'],
+        ]);
+
+        Plugin::voidInvoiceOfCancelledOrder(1042, $order);
+
+        $this->assertSame(['VeliraPay invoice invoice1042 could not be voided: a short payment, or one still confirming, keeps it payable. Check it in the VeliraPay dashboard, where a short payment has to be accepted before it can be refunded.'], array_column(wc_get_order_notes(['order_id' => 1042]), 'content'));
+        $this->assertSame([], $GLOBALS['velirapay_test_events'] ?? []);
+    }
+
+    public function test_a_void_refused_because_the_invoice_is_already_settled_adds_no_note(): void
+    {
+        $order = $this->pendingOrder();
+        $order->set_status('cancelled');
+        $this->route([
+            'POST invoices/invoice1042/void' => [409, '{"message":"Only open invoices without a payment on its way can be voided."}'],
+            'GET invoices/invoice1042' => [200, '{"data":{"id":"invoice1042","status":"void","charges":[]}}'],
+        ]);
+
+        Plugin::voidInvoiceOfCancelledOrder(1042, $order);
+
+        $this->assertSame([], wc_get_order_notes(['order_id' => 1042]));
+    }
+
+    public function test_an_invoice_of_the_other_mode_or_account_is_noted_without_retrying(): void
+    {
+        $order = $this->pendingOrder();
+        $order->set_status('cancelled');
+        $this->route([]);
+
+        Plugin::voidInvoiceOfCancelledOrder(1042, $order);
+
+        $this->assertSame(['VeliraPay invoice invoice1042 could not be voided with the current API key: it belongs to the other mode or another account. Void it in the VeliraPay dashboard.'], array_column(wc_get_order_notes(['order_id' => 1042]), 'content'));
+        $this->assertSame([], $GLOBALS['velirapay_test_events'] ?? []);
+    }
+
+    public function test_a_voided_invoice_is_noted(): void
+    {
+        $order = $this->pendingOrder();
+        $order->set_status('cancelled');
+        $this->route(['POST invoices/invoice1042/void' => [200, '{"data":{"id":"invoice1042","status":"void"}}']]);
+
+        Plugin::voidInvoiceOfCancelledOrder(1042, $order);
+
+        $this->assertSame(['The VeliraPay invoice was voided; it can no longer be paid.'], array_column(wc_get_order_notes(['order_id' => 1042]), 'content'));
+    }
+
     /**
      * Create a pending order paid with VeliraPay through the checkout, with an invoice, and a live-mode gateway.
      */
@@ -174,6 +267,23 @@ final class PluginTest extends TestCase
         $GLOBALS['velirapay_test_gateway'] = $gateway;
 
         return $order;
+    }
+
+    /**
+     * Answer each request by its method and path, a 404 for any other, recording the method and path of each.
+     *
+     * @param  array<string, array{int, string}>  $answers
+     */
+    private function route(array $answers): void
+    {
+        $this->sent = [];
+        $GLOBALS['velirapay_test_http'] = function (string $url, array $args) use ($answers): array {
+            $route = (is_string($args['method'] ?? null) ? $args['method'] : '').' '.substr($url, strlen('https://api.velirapay.com/v1/'));
+            $this->sent[] = $route;
+            [$status, $body] = $answers[$route] ?? [404, '{"message":"No such object."}'];
+
+            return ['status' => $status, 'body' => $body];
+        };
     }
 
     /**

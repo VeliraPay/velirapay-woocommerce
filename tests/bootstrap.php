@@ -521,20 +521,47 @@ function set_site_transient(string $name, mixed $value, int $expiration = 0): bo
 
 function wp_next_scheduled(string $hook, array $args = []): int|false
 {
-    return $GLOBALS['velirapay_test_schedule'][$hook] ?? false;
+    foreach ($GLOBALS['velirapay_test_events'] ?? [] as [$timestamp, $scheduledHook, $scheduledArgs]) {
+        if ($scheduledHook === $hook && $scheduledArgs === $args) {
+            return $timestamp;
+        }
+    }
+
+    return false;
 }
 
+// As WordPress does, the same hook with the same arguments is not scheduled twice within ten minutes.
 function wp_schedule_single_event(int $timestamp, string $hook, array $args = []): bool
 {
+    foreach ($GLOBALS['velirapay_test_events'] ?? [] as [$scheduled, $scheduledHook, $scheduledArgs]) {
+        if ($scheduledHook === $hook && $scheduledArgs === $args && abs($scheduled - $timestamp) < 600) {
+            return false;
+        }
+    }
+
     $GLOBALS['velirapay_test_schedule'][$hook] = $timestamp;
     $GLOBALS['velirapay_test_events'][] = [$timestamp, $hook, $args];
 
     return true;
 }
 
-function wp_clear_scheduled_hook(string $hook): int
+function wp_clear_scheduled_hook(string $hook, array $args = []): int
 {
     unset($GLOBALS['velirapay_test_schedule'][$hook]);
+    $GLOBALS['velirapay_test_events'] = array_values(array_filter($GLOBALS['velirapay_test_events'] ?? [], static fn (array $event): bool => $event[1] !== $hook || $event[2] !== $args));
 
     return 1;
+}
+
+function wp_unschedule_hook(string $hook): int
+{
+    unset($GLOBALS['velirapay_test_schedule'][$hook]);
+    $GLOBALS['velirapay_test_events'] = array_values(array_filter($GLOBALS['velirapay_test_events'] ?? [], static fn (array $event): bool => $event[1] !== $hook));
+
+    return 1;
+}
+
+function get_post_type(int $postId): string|false
+{
+    return isset($GLOBALS['velirapay_test_orders'][$postId]) ? 'shop_order' : false;
 }
