@@ -252,6 +252,70 @@ final class PluginTest extends TestCase
     }
 
     /**
+     * Statuses of an order whose invoice can still be paid.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function unpaidStatuses(): iterable
+    {
+        yield 'pending' => ['pending'];
+        yield 'on hold' => ['on-hold'];
+        yield 'failed' => ['failed'];
+    }
+
+    #[DataProvider('unpaidStatuses')]
+    public function test_trashing_an_unpaid_order_voids_its_invoice_from_wp_cron(string $status): void
+    {
+        $order = $this->pendingOrder();
+        $order->set_status($status);
+        $this->route(['POST invoices/invoice1042/void' => [200, '{"data":{"id":"invoice1042","status":"void"}}']]);
+
+        Plugin::voidInvoiceOfRemovedOrder(1042, $order);
+        // On the posts table, trashing through WooCommerce fires WordPress's own trash hook as well.
+        Plugin::voidInvoiceOfTrashedPost(1042);
+
+        $this->assertSame([], $this->sent);
+        $this->assertCount(1, is_array($GLOBALS['velirapay_test_events'] ?? null) ? $GLOBALS['velirapay_test_events'] : []);
+        $this->assertIsInt(wp_next_scheduled(Plugin::VOID_HOOK, [1042, 'invoice1042', 1]));
+
+        $order->set_status('trash');
+        Plugin::retryVoid(1042, 'invoice1042', 1);
+
+        $this->assertSame(['POST invoices/invoice1042/void'], $this->sent);
+        $this->assertSame(['The VeliraPay invoice was voided; it can no longer be paid.'], array_column(wc_get_order_notes(['order_id' => 1042]), 'content'));
+    }
+
+    public function test_deleting_an_unpaid_order_voids_its_invoice_once_it_is_gone(): void
+    {
+        $order = $this->pendingOrder();
+        $this->route(['POST invoices/invoice1042/void' => [200, '{"data":{"id":"invoice1042","status":"void"}}']]);
+
+        Plugin::voidInvoiceOfRemovedOrder(1042, $order);
+        unset($GLOBALS['velirapay_test_orders']);
+        Plugin::retryVoid(1042, 'invoice1042', 1);
+
+        $this->assertSame(['POST invoices/invoice1042/void'], $this->sent);
+        $this->assertSame(['Invoice invoice1042 of a deleted order: The VeliraPay invoice was voided; it can no longer be paid.'], $GLOBALS['velirapay_test_logs'] ?? null);
+    }
+
+    public function test_removing_an_order_that_cannot_be_paid_any_more_leaves_its_invoice_alone(): void
+    {
+        $paid = $this->pendingOrder();
+        $paid->set_status('processing');
+        $cancelled = $this->pendingOrder(1043);
+        $cancelled->set_status('cancelled');
+        $other = $this->pendingOrder(1044);
+        $other->set_payment_method('cod');
+
+        Plugin::voidInvoiceOfRemovedOrder(1042, $paid);
+        Plugin::voidInvoiceOfRemovedOrder(1043, $cancelled);
+        Plugin::voidInvoiceOfRemovedOrder(1044, $other);
+        Plugin::voidInvoiceOfTrashedPost(999);
+
+        $this->assertSame([], $GLOBALS['velirapay_test_events'] ?? []);
+    }
+
+    /**
      * Create a pending order paid with VeliraPay through the checkout, with an invoice, and a live-mode gateway.
      */
     private function pendingOrder(int $id = 1042): WC_Order

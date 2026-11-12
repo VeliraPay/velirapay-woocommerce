@@ -123,6 +123,9 @@ final class Plugin
         add_action('woocommerce_api_'.Gateway::ID, [self::class, 'receiveWebhook']);
         add_action('woocommerce_order_status_cancelled', [self::class, 'voidInvoiceOfCancelledOrder'], 10, 2);
         add_action(self::VOID_HOOK, [self::class, 'retryVoid'], 10, 3);
+        add_action('woocommerce_before_trash_order', [self::class, 'voidInvoiceOfRemovedOrder'], 10, 2);
+        add_action('woocommerce_before_delete_order', [self::class, 'voidInvoiceOfRemovedOrder'], 10, 2);
+        add_action('wp_trash_post', [self::class, 'voidInvoiceOfTrashedPost']);
         add_filter('woocommerce_cancel_unpaid_order', [self::class, 'keepOrderBeingPaid'], 10, 2);
         add_filter('woocommerce_order_actions', [self::class, 'addOrderAction'], 10, 2);
         add_action('woocommerce_order_action_'.self::CHECK_STATUS_ACTION, [self::class, 'checkStatus']);
@@ -210,6 +213,37 @@ final class Plugin
 
         if ($code !== '') {
             self::voidInvoice($order->get_id(), $code, $order, 1);
+        }
+    }
+
+    /**
+     * Void the invoice of an order still waiting for payment that is being trashed or deleted, so a payment to it is not
+     * left matching no order. It is voided from WP-Cron, so neither a single removal nor a bulk one waits on VeliraPay,
+     * and retried there; a cancelled order's invoice was voided when it was cancelled.
+     */
+    public static function voidInvoiceOfRemovedOrder(mixed $orderId, mixed $order = null): void
+    {
+        $order = $order instanceof WC_Order ? $order : (is_numeric($orderId) ? wc_get_order((int) $orderId) : false);
+
+        if (! $order instanceof WC_Order || $order->get_payment_method() !== Gateway::ID || ! $order->has_status(['pending', 'on-hold', 'failed'])) {
+            return;
+        }
+
+        $code = WooCommerceOrder::invoiceCodeOf($order);
+
+        // WordPress schedules the same event once, so an order both of its trash hooks see is voided once.
+        if ($code !== '') {
+            wp_schedule_single_event(time(), self::VOID_HOOK, [$order->get_id(), $code, 1]);
+        }
+    }
+
+    /**
+     * Void the invoice of an order trashed from the posts table's own list, which skips WooCommerce's trash hooks.
+     */
+    public static function voidInvoiceOfTrashedPost(mixed $postId): void
+    {
+        if (is_numeric($postId) && get_post_type((int) $postId) === 'shop_order') {
+            self::voidInvoiceOfRemovedOrder((int) $postId);
         }
     }
 

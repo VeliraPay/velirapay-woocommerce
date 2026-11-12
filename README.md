@@ -72,6 +72,8 @@ WooCommerce's **Hold stock** timer leaves alone an order whose invoice a custome
 
 Cancelling an order, from the admin, from the customer's account or by the **Hold stock** timer, voids its invoice with `POST /v1/invoices/{id}/void`, so the hosted page stops taking payment. A void VeliraPay could not be reached for, was too busy for (429) or failed on its side (5xx) is tried again from WP-Cron after 1, 5, 15 and 60 minutes, as long as the order is still cancelled and names the same invoice, and only the last failure is noted. One refused because the invoice belongs to the other mode or account (404) is noted at once. VeliraPay answers 409 when the invoice is already paid or voided, or a short payment or one still confirming keeps it payable; the plugin then reads the invoice, notes the second case so you can settle it in the dashboard, and lets VeliraPay report what happens to it. The order stays cancelled whatever it reports: a payment that completes the invoice anyway only adds a note.
 
+Trashing or deleting an order still pending, on hold or failed voids its invoice the same way, so a payment to it is not left matching no order. That void runs from WP-Cron, so neither a single removal nor a bulk one waits on VeliraPay, and is retried there; it covers the trash of both order stores and of the posts table's own order list.
+
 ## How statuses map
 
 The same mapping is applied whether the news comes from a webhook or from polling:
