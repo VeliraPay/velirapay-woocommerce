@@ -2,6 +2,10 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+- The invoice's hosted page sends the customer back to the store: once they have paid it offers a button back to the order-received page, and until then a link back to the order's own payment page, to pay for it another way. The plugin sends both as the invoice's `success_url` and `cancel_url`, and leaves out an address VeliraPay would refuse, such as a store served over plain HTTP or on `localhost`, so checkout still works there. Needs VeliraPay's invoice return addresses, which an older API ignores.
+
 ## 0.4.0 - 2026-11-12
 
 - A late payment to an expired, canceled or underpaid charge now holds an order still waiting for payment (pending, failed or on hold) instead of only noting it, so WooCommerce's **Hold stock** timer no longer cancels the order, and voids its invoice, while the money waits for you to accept it. A cancelled order still only gets the note.

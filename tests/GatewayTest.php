@@ -176,6 +176,42 @@ final class GatewayTest extends TestCase
         yield 'an amount under the lowest price' => ['amount', 'Enter at least €0.50.'];
     }
 
+    public function test_the_invoice_offers_the_way_back_to_the_order_and_its_checkout_page(): void
+    {
+        $this->assertSame(
+            [
+                'success_url' => 'https://store.example/checkout/order-received/1042/?key=wc_order_example',
+                'cancel_url' => 'https://store.example/checkout/order-pay/1042/?pay_for_order=true&key=wc_order_example',
+            ],
+            array_intersect_key($this->createdInvoiceBody(), ['success_url' => true, 'cancel_url' => true]),
+        );
+    }
+
+    /**
+     * Store addresses VeliraPay refuses as a way back.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function addressesVeliraPayRefuses(): iterable
+    {
+        yield 'plain http' => ['http://store.example'];
+        yield 'localhost' => ['https://localhost:8443'];
+        yield 'a local name' => ['https://store.local'];
+        yield 'an IP address' => ['https://203.0.113.7'];
+        yield 'a host name without a dot' => ['https://intranet'];
+    }
+
+    #[DataProvider('addressesVeliraPayRefuses')]
+    public function test_a_store_address_velirapay_would_refuse_is_left_out_rather_than_failing_checkout(string $home): void
+    {
+        $GLOBALS['velirapay_test_home'] = $home;
+
+        $body = $this->createdInvoiceBody();
+
+        $this->assertArrayNotHasKey('success_url', $body);
+        $this->assertArrayNotHasKey('cancel_url', $body);
+    }
+
     #[DataProvider('refusalsTheCustomerCanFix')]
     public function test_a_refusal_the_customer_can_fix_is_shown_at_checkout(string $field, string $message): void
     {
@@ -400,6 +436,29 @@ final class GatewayTest extends TestCase
         $GLOBALS['velirapay_test_gateway'] = $gateway;
 
         return $gateway;
+    }
+
+    /**
+     * Pay order 1042 with the gateway and get the body of the request that created its invoice, as decoded.
+     *
+     * @return array<array-key, mixed>
+     */
+    private function createdInvoiceBody(): array
+    {
+        $order = new WC_Order(1042);
+        $order->set_billing_email('grace@example.com');
+        $GLOBALS['velirapay_test_orders'] = [1042 => $order];
+        $body = null;
+        $GLOBALS['velirapay_test_http'] = static function (string $url, array $args) use (&$body): array {
+            $body = is_string($args['body'] ?? null) ? json_decode($args['body'], true) : null;
+
+            return ['status' => 201, 'body' => self::invoiceJson('newinvoice34', 'open', '49.90')];
+        };
+
+        $this->assertSame(['result' => 'success', 'redirect' => 'https://velirapay.com/i/newinvoice34'], $this->gateway()->process_payment(1042));
+        $this->assertIsArray($body);
+
+        return $body;
     }
 
     /**

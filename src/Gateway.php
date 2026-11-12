@@ -548,6 +548,7 @@ final class Gateway extends WC_Payment_Gateway
                 wp_specialchars_decode(get_bloginfo('name'), ENT_QUOTES),
             ), 0, 500),
             'send_email' => false,
+            ...self::returnAddresses($this->get_return_url($order), $order->get_checkout_payment_url()),
         ];
 
         // Keyed by the invoice it replaces as well as its details, so a replay can never hand back an invoice voided since,
@@ -566,6 +567,43 @@ final class Gateway extends WC_Payment_Gateway
         ));
 
         return $invoice;
+    }
+
+    /**
+     * Get the pages the invoice's page offers the customer a way back to: the order-received page once they have paid,
+     * the order's own checkout page until then, which works with an emptied cart, each left out where VeliraPay would refuse it.
+     *
+     * @return array{success_url?: string, cancel_url?: string}
+     */
+    private static function returnAddresses(string $successUrl, string $cancelUrl): array
+    {
+        return array_filter(['success_url' => $successUrl, 'cancel_url' => $cancelUrl], self::isPublicAddress(...));
+    }
+
+    /**
+     * Determine if VeliraPay takes an address as a way back: https, without credentials, on a public host name.
+     */
+    private static function isPublicAddress(string $url): bool
+    {
+        $parts = wp_parse_url($url);
+
+        if (! is_array($parts) || strlen($url) > 2048 || strtolower((string) ($parts['scheme'] ?? '')) !== 'https' || isset($parts['user'])) {
+            return false;
+        }
+
+        $host = rtrim(strtolower(trim((string) ($parts['host'] ?? ''), '[]')), '.');
+
+        if (! str_contains($host, '.') || filter_var($host, FILTER_VALIDATE_IP) !== false) {
+            return false;
+        }
+
+        foreach (['.localhost', '.local', '.internal', '.home.arpa', '.lan'] as $suffix) {
+            if (str_ends_with($host, $suffix)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

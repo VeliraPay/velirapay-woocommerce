@@ -32,7 +32,7 @@ if (! class_exists('WC_Payment_Gateway')) {
 
         public function get_return_url(WC_Order $order): string
         {
-            return 'https://store.example/order-received/'.$order->get_id();
+            return home_url('/checkout/order-received/'.$order->get_id().'/?key='.$order->get_order_key());
         }
 
         public function is_available(): bool
@@ -138,6 +138,11 @@ if (! class_exists('WC_Order')) {
         public function get_order_key(): string
         {
             return 'wc_order_example';
+        }
+
+        public function get_checkout_payment_url(): string
+        {
+            return home_url('/checkout/order-pay/'.$this->id.'/?pay_for_order=true&key='.$this->get_order_key());
         }
 
         public function get_formatted_billing_full_name(): string

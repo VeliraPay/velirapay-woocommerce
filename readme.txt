@@ -31,7 +31,7 @@ Refunds are not automated. Crypto cannot be pulled back: send the coins from you
 
 This plugin connects to VeliraPay's API, https://api.velirapay.com, the crypto payment processor it adds to the store, to take payments:
 
-* When a customer pays an order, it creates a VeliraPay invoice for it, sending the customer's billing name and email address, the order total and currency, and a memo with the order number and the store's name.
+* When a customer pays an order, it creates a VeliraPay invoice for it, sending the customer's billing name and email address, the order total and currency, a memo with the order number and the store's name, and the addresses of the order's order-received and payment pages, for the hosted page to send the customer back to.
 * On the store's pages and the block checkout, while a customer has something in the cart or pays for an existing order, it reads which coins the store's VeliraPay account takes in the store currency, at most once every ten minutes, sending nothing about the customer or the cart.
 * It reads the order's invoice when the customer opens the order-received page, when you choose "Check VeliraPay status", every hour for orders waiting for payment, and before WooCommerce's "Hold stock" timer cancels an order.
 * It voids the order's invoice when the order is cancelled, trashed or deleted.
