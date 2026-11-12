@@ -50,7 +50,7 @@ Each mode has its own keys and endpoints, so do the dashboard steps once in live
 
 ## How orders map to invoices
 
-A store does not know which coin a customer wants to pay in, and a charge needs its coin up front, so an order becomes an invoice, whose hosted page lets the customer pick. USDT and USDC on Ethereum start at 10 of the token, so a smaller order simply does not offer them there.
+A store does not know which coin a customer wants to pay in, and a charge needs its coin up front, so an order becomes an invoice, whose hosted page lets the customer pick. USDT and USDC on Ethereum start at 10 of the token, so a smaller order simply does not offer them there. USDT on Tron asks the customer for a network surcharge of 2.50 USDT on top of the price, which the hosted page shows before the coin is chosen; the invoice, and what the order is paid for, stay the order total.
 
 At checkout, and on the page where a customer pays for an existing order, the method is only offered when the total reaches the currency's lowest price (`Gateway::LOWEST_PRICES`, the same as VeliraPay's) and a coin the account takes can be paid for that much. The plugin asks `GET /v1/assets?currency=…` which coins the account takes and the lowest price of each, waits at most three seconds for the answer, and remembers it for ten minutes, or a failure to get it for three, falling back on the currency's lowest price meanwhile. On the block checkout the method is also left out as soon as a coupon or a removed item takes the total below that amount. Outside the storefront, in the admin, REST requests and cron, nothing is asked.
 
@@ -132,7 +132,7 @@ Hourly polling snapshots the eligible order IDs and checks up to 50 at a time, w
 
 ## Test mode
 
-Tick **Test mode** in the settings to use the test API key and have test deliveries, rather than live ones, act on orders. Test payments run on each chain's test network and move no real funds; a test charge's page in the dashboard has a **Simulate payment** button when no test coins are at hand. The two modes share nothing, so an invoice created in one is unknown to the other: switching modes while orders wait for payment leaves those orders to be paid in the mode they were created in. Retrying such an order fails until the original mode and account's key are restored; it never replaces a live invoice with a test invoice. Restore the original settings and use **Check VeliraPay status** to synchronize an order paid while its mode was inactive.
+Tick **Test mode** in the settings to use the test API key and have test deliveries, rather than live ones, act on orders. Test payments run on each chain's test network and move no real funds; a test charge's page in the dashboard has a **Simulate payment** button when no test coins are at hand. The coins on BNB Chain, Base, Arbitrum One and Polygon are offered in live mode only, so the test hosted page leaves them out. The two modes share nothing, so an invoice created in one is unknown to the other: switching modes while orders wait for payment leaves those orders to be paid in the mode they were created in. Retrying such an order fails until the original mode and account's key are restored; it never replaces a live invoice with a test invoice. Restore the original settings and use **Check VeliraPay status** to synchronize an order paid while its mode was inactive.
 
 ## Refunds
 
