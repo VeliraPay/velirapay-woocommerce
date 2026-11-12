@@ -26,6 +26,7 @@ All notable changes to this plugin are documented here. It follows [Semantic Ver
 - The documentation says which emails VeliraPay sends customers despite `send_email: false`: a receipt, a short-payment notice and refund notices in live mode.
 - A version tag only publishes the plugin zip once the tests, static analysis and code style pass, `Plugin::VERSION` agrees with the plugin header, readme.txt's stable tag and the tag, and the tagged commit is on `main`. The zip is then built and published by a job of its own that installs no dependencies, so nothing the tests install can change it or reach the release.
 - Exception messages, the API's among them, are escaped, the webhook's signature header and the order key on the order-received page are unslashed and sanitized, saved API keys and webhook secrets are sanitized, and every PHP file stops unless WordPress loads it, so the plugin passes WordPress's Plugin Check. The signature header VeliraPay sends, `t=<unix time>,v1=<hex>` with one `v1` or two, comes through sanitizing unchanged.
+- CI runs WordPress's Plugin Check, which WordPress.org reviews plugins with, on the plugin as the zip holds it, and fails on any error it reports.
 
 ## 0.3.1 - 2026-11-06
 
