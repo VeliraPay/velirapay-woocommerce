@@ -380,7 +380,7 @@ final class Gateway extends WC_Payment_Gateway
             return $order instanceof WC_Order ? ['amount' => (string) $order->get_total(), 'currency' => $order->get_currency()] : null;
         }
 
-        // WooCommerce only loads a cart on the storefront, whatever its property's type says: not in the admin, REST or cron.
+        // WooCommerce only loads a cart on the storefront and its Store API, whatever its property's type says: not in the admin or cron.
         $cart = get_object_vars(WC())['cart'] ?? null;
 
         return $cart instanceof WC_Cart ? ['amount' => (string) $cart->get_total('edit'), 'currency' => get_woocommerce_currency()] : null;
