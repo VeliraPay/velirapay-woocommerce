@@ -275,6 +275,31 @@ final class PluginTest extends TestCase
         $this->assertSame('Bearer vp_live_example', is_array($sent[0]['headers'] ?? null) ? ($sent[0]['headers']['Authorization'] ?? null) : null);
     }
 
+    public function test_a_key_refused_while_the_store_runs_is_shown_until_the_same_kind_of_request_succeeds(): void
+    {
+        $this->pendingOrder();
+        $client = new Client('vp_live_example', Plugin::httpTransport(), Plugin::userAgent());
+        $this->route(['POST invoices' => [403, '{"message":"This API key does not have the invoices:write permission."}']]);
+
+        try {
+            $client->createInvoice(['amount' => '49.90'], 'key');
+        } catch (ApiException) {
+        }
+
+        $this->assertStringContainsString('VeliraPay refused the live API key: This API key does not have the invoices:write permission.', $this->notices());
+
+        // The hourly poll's reads succeed, but say nothing of what the checkout needs.
+        $this->route(['GET invoices/invoice1042' => [200, '{"data":{"id":"invoice1042","status":"open","charges":[]}}']]);
+        $client->retrieveInvoice('invoice1042');
+
+        $this->assertStringContainsString('invoices:write', $this->notices());
+
+        $this->route(['POST invoices' => [201, '{"data":{"id":"invoice1042","status":"open"}}']]);
+        $client->createInvoice(['amount' => '49.90'], 'key');
+
+        $this->assertStringNotContainsString('refused', $this->notices());
+    }
+
     /**
      * Statuses of an order whose invoice can still be paid.
      *
@@ -355,6 +380,17 @@ final class PluginTest extends TestCase
         $GLOBALS['velirapay_test_gateway'] = $gateway;
 
         return $order;
+    }
+
+    /**
+     * Get the admin notices the plugin prints for the store's configuration.
+     */
+    private function notices(): string
+    {
+        ob_start();
+        Plugin::configurationNotices();
+
+        return (string) ob_get_clean();
     }
 
     /**

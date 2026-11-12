@@ -79,6 +79,11 @@ final class Plugin
     private const UNREACHABLE_TRANSIENT = 'velirapay_api_unreachable';
 
     /**
+     * The start of the transients holding what VeliraPay said refusing a mode's key, one per kind of request.
+     */
+    private const REFUSAL_TRANSIENT = 'velirapay_key_refused_';
+
+    /**
      * The main plugin file.
      */
     private static string $file = '';
@@ -471,6 +476,25 @@ final class Plugin
                 esc_url(admin_url('admin.php?page=wc-settings&tab=checkout&section='.Gateway::ID)),
             ));
         }
+
+        $refusals = [];
+
+        foreach (['get', 'post'] as $kind) {
+            $refusal = get_transient(self::REFUSAL_TRANSIENT.$gateway->mode().'_'.$kind);
+
+            if (is_string($refusal) && $gateway->apiKey() !== '') {
+                $refusals[] = $refusal;
+            }
+        }
+
+        foreach (array_unique($refusals) as $refusal) {
+            self::notice(sprintf(
+                /* translators: 1: "live" or "test", 2: VeliraPay's message */
+                __('VeliraPay refused the %1$s API key: %2$s Check the key, its permissions and the addresses it may be used from under Developers → API keys in the VeliraPay dashboard.', 'velirapay-woocommerce'),
+                $gateway->mode(),
+                esc_html($refusal),
+            ));
+        }
     }
 
     /**
@@ -542,13 +566,49 @@ final class Plugin
                 throw new ApiException('Could not reach the VeliraPay API: '.$response->get_error_message(), 0);
             }
 
-            return [
-                'status' => (int) wp_remote_retrieve_response_code($response),
-                'body' => wp_remote_retrieve_body($response),
-            ];
+            $status = (int) wp_remote_retrieve_response_code($response);
+            $answer = wp_remote_retrieve_body($response);
+            $authorization = $headers['Authorization'] ?? '';
+
+            self::rememberRefusal($method, is_string($authorization) ? $authorization : '', $status, $answer);
+
+            return ['status' => $status, 'body' => $answer];
         };
 
         return $transport;
+    }
+
+    /**
+     * Forget what VeliraPay said refusing a mode's key, once another key is saved for that mode.
+     */
+    public static function forgetRefusals(string $mode): void
+    {
+        delete_transient(self::REFUSAL_TRANSIENT.$mode.'_get');
+        delete_transient(self::REFUSAL_TRANSIENT.$mode.'_post');
+    }
+
+    /**
+     * Remember a 401 or 403 VeliraPay answered a mode's key with, for the admin notices, until a request of the same
+     * kind succeeds: a key without invoices:write still reads invoices, so a read succeeding says nothing of the checkout.
+     */
+    private static function rememberRefusal(string $method, string $authorization, int $status, string $body): void
+    {
+        $mode = Client::modeOf(str_starts_with($authorization, 'Bearer ') ? substr($authorization, 7) : '');
+
+        if ($mode === null) {
+            return;
+        }
+
+        $transient = self::REFUSAL_TRANSIENT.$mode.'_'.strtolower($method);
+
+        if ($status === 401 || $status === 403) {
+            $decoded = json_decode($body, true);
+            $message = is_array($decoded) && is_string($decoded['message'] ?? null) && $decoded['message'] !== '' ? $decoded['message'] : sprintf('HTTP %d', $status);
+
+            set_transient($transient, $message, WEEK_IN_SECONDS);
+        } elseif ($status >= 200 && $status < 300 && get_transient($transient) !== false) {
+            delete_transient($transient);
+        }
     }
 
     /**

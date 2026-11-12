@@ -36,13 +36,13 @@ bin/build.sh
 ## Setup
 
 1. Create an API key in the VeliraPay dashboard under **Developers → API keys**. Keys starting with `vp_live_` work in live mode, `vp_test_` in test mode. The plugin only creates, reads and voids invoices, so a restricted key with **Read invoices** and **Create invoices** (`invoices:read`, `invoices:write`) is all it needs. A key the store already uses can be restricted the same way with the pencil next to it on that page, with no need to paste it again.
-2. Open **WooCommerce → Settings → Payments → VeliraPay** and paste the key into the live or test field. The prefix is checked when you save.
+2. Open **WooCommerce → Settings → Payments → VeliraPay** and paste the key into the live or test field. The prefix is checked when you save, and a new key is checked with VeliraPay (`GET /v1/account`, `GET /v1/invoices?per_page=1`): a key that is invalid or revoked, refused from the store's address, or without `invoices:read` is reported on the settings page, though saved anyway.
 3. Copy the **Webhook URL** shown on that page: `https://your-store.example/wc-api/velirapay/`, `https://your-store.example/index.php/wc-api/velirapay/` or `https://your-store.example/?wc-api=velirapay`, depending on your permalinks. VeliraPay only delivers to an `https://` address on port 443 that answers within 15 seconds without redirecting, so the URL is always shown with `https://`, and the page warns when the site's own address is still `http://`. In the dashboard, under **Developers → Webhooks**, add an endpoint with it and tick `invoice.paid`, `invoice.voided`, `charge.payment_detected`, `charge.underpaid`, `charge.expired`, `charge.late_payment` and `charge.refunded`. Ticking every event works too: the rest only add notes.
 4. Paste the endpoint's signing secret (`whsec_…`) into the matching webhook secret field.
 5. Enable the gateway and save.
 6. Back on the endpoint's page in the dashboard, press **Verify**. The plugin answers the challenge VeliraPay sends, and the endpoint receives nothing until it has.
 
-Each mode has its own keys and endpoints, so do the dashboard steps once in live mode and once in test mode. The settings page shows a notice when the gateway is enabled without a key for its mode, or when the store currency is not one VeliraPay bills in; in both cases the method is not offered at checkout.
+Each mode has its own keys and endpoints, so do the dashboard steps once in live mode and once in test mode. The settings page shows a notice when the gateway is enabled without a key for its mode, or when the store currency is not one VeliraPay bills in; in both cases the method is not offered at checkout. It also shows what VeliraPay last said refusing the current mode's key (401 or 403), such as a key without `invoices:write` at checkout, which cannot be checked without creating an invoice, until a request of the same kind, a read or a write, succeeds.
 
 ## How orders map to invoices
 

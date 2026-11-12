@@ -186,19 +186,19 @@ final class Gateway extends WC_Payment_Gateway
     }
 
     /**
-     * Keep a live key only when it has the live prefix.
+     * Keep a live key only when it has the live prefix, and check a new one with VeliraPay.
      */
     public function validate_live_api_key_field(string $key, mixed $value): string
     {
-        return $this->validatePrefixed($key, $value, Client::LIVE_PREFIX);
+        return $this->validateKey($key, $value, Client::LIVE_PREFIX);
     }
 
     /**
-     * Keep a test key only when it has the test prefix.
+     * Keep a test key only when it has the test prefix, and check a new one with VeliraPay.
      */
     public function validate_test_api_key_field(string $key, mixed $value): string
     {
-        return $this->validatePrefixed($key, $value, Client::TEST_PREFIX);
+        return $this->validateKey($key, $value, Client::TEST_PREFIX);
     }
 
     /**
@@ -644,6 +644,50 @@ final class Gateway extends WC_Payment_Gateway
     }
 
     /**
+     * Keep a posted key only when it has its mode's prefix, and ask VeliraPay about a new one. The key is saved whatever
+     * VeliraPay answers, with an error on the settings page when it refuses the key.
+     */
+    private function validateKey(string $key, mixed $value, string $prefix): string
+    {
+        $saved = $this->get_option($key);
+        $apiKey = $this->validatePrefixed($key, $value, $prefix);
+
+        if ($apiKey !== '' && $apiKey !== trim($saved)) {
+            Plugin::forgetRefusals((string) Client::modeOf($apiKey));
+            $this->checkKey($key, $apiKey);
+        }
+
+        return $apiKey;
+    }
+
+    /**
+     * Ask VeliraPay about a key: the account, which needs no permission, tells a valid key from a revoked one or one
+     * refused from this site's address, and the invoices list needs invoices:read. Whether it may create invoices only
+     * shows when the checkout first tries, which the admin notices then report. A VeliraPay that cannot be reached is
+     * not taken as a refusal.
+     */
+    private function checkKey(string $key, string $apiKey): void
+    {
+        $client = new Client($apiKey, Plugin::httpTransport(), Plugin::userAgent());
+
+        try {
+            $client->request('GET', 'account');
+            $client->request('GET', 'invoices?per_page=1');
+        } catch (ApiException $exception) {
+            if ($exception->status === 0 || $exception->status === 429 || $exception->status >= 500) {
+                return;
+            }
+
+            $this->settingsError(sprintf(
+                /* translators: 1: field name, 2: VeliraPay's message */
+                __('VeliraPay refused the %1$s: %2$s It was saved anyway; check it under Developers → API keys in the VeliraPay dashboard.', 'velirapay-woocommerce'),
+                $this->fieldTitle($key),
+                $exception->getMessage(),
+            ));
+        }
+    }
+
+    /**
      * Keep a posted value only when it, or each comma-separated item of it, has the expected prefix.
      */
     private function validatePrefixed(string $key, mixed $value, string $prefix, bool $list = false): string
@@ -653,23 +697,37 @@ final class Gateway extends WC_Payment_Gateway
 
         foreach ($items as $item) {
             if ($item !== '' && ! str_starts_with($item, $prefix)) {
-                $field = $this->form_fields[$key] ?? null;
-                $title = is_array($field) && is_string($field['title'] ?? null) ? $field['title'] : $key;
-
-                // The settings screen shows these; a REST update of the settings has no screen to show them on.
-                if (class_exists(WC_Admin_Settings::class)) {
-                    WC_Admin_Settings::add_error(sprintf(
-                        /* translators: 1: field name, 2: expected prefix */
-                        __('%1$s was not saved: it must start with %2$s.', 'velirapay-woocommerce'),
-                        $title,
-                        $prefix,
-                    ));
-                }
+                $this->settingsError(sprintf(
+                    /* translators: 1: field name, 2: expected prefix */
+                    __('%1$s was not saved: it must start with %2$s.', 'velirapay-woocommerce'),
+                    $this->fieldTitle($key),
+                    $prefix,
+                ));
 
                 return $this->get_option($key);
             }
         }
 
         return $list ? implode(',', $items) : $value;
+    }
+
+    /**
+     * Get a settings field's title, such as "Live API key".
+     */
+    private function fieldTitle(string $key): string
+    {
+        $field = $this->form_fields[$key] ?? null;
+
+        return is_array($field) && is_string($field['title'] ?? null) ? $field['title'] : $key;
+    }
+
+    /**
+     * Show an error on the settings screen; a REST update of the settings has no screen to show it on.
+     */
+    private function settingsError(string $message): void
+    {
+        if (class_exists(WC_Admin_Settings::class)) {
+            WC_Admin_Settings::add_error($message);
+        }
     }
 }

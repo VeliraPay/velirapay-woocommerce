@@ -18,6 +18,7 @@ All notable changes to this plugin are documented here. It follows [Semantic Ver
 - Trashing or deleting an order still pending, on hold or failed voids its invoice, from WP-Cron so the removal never waits on VeliraPay; before, the invoice stayed payable and a payment to it matched no order.
 - API requests no longer follow redirects, which WordPress would have sent the API key along with to wherever they pointed; a redirect is taken as an error, as the other official libraries do.
 - The settings page always shows the webhook URL with `https://`, which VeliraPay requires, and warns when the site's own address is still `http://`.
+- A new API key is checked with VeliraPay when the settings are saved: one that is invalid or revoked, refused from the store's address, or without `invoices:read` is reported on the settings page, and saved anyway. A key VeliraPay refuses later, such as one without `invoices:write` at checkout, shows in an admin notice until a request of the same kind succeeds, rather than only in the failed order's notes.
 
 ## 0.3.1 - 2026-11-06
 

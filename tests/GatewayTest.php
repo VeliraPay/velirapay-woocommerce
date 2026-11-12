@@ -244,6 +244,45 @@ final class GatewayTest extends TestCase
         $this->assertStringContainsString('"customer_email":"ada@example.com"', $bodies[0]);
     }
 
+    public function test_a_new_key_is_checked_with_velirapay_when_it_is_saved_and_saved_even_when_refused(): void
+    {
+        $gateway = $this->gateway();
+        $gateway->form_fields = ['live_api_key' => ['title' => 'Live API key']];
+        $this->route([
+            'GET account' => [200, '{"data":{"id":"acct_1"}}'],
+            'GET invoices?per_page=1' => [403, '{"message":"This API key does not have the invoices:read permission."}'],
+        ]);
+
+        $this->assertSame('vp_live_restricted', $gateway->validate_live_api_key_field('live_api_key', 'vp_live_restricted'));
+        $this->assertSame(['GET account', 'GET invoices?per_page=1'], array_column($this->sent, 0));
+        $this->assertSame(['VeliraPay refused the Live API key: This API key does not have the invoices:read permission. It was saved anyway; check it under Developers → API keys in the VeliraPay dashboard.'], $GLOBALS['velirapay_test_settings_errors'] ?? null);
+    }
+
+    public function test_a_revoked_key_is_reported_when_it_is_saved(): void
+    {
+        $gateway = $this->gateway();
+        $gateway->form_fields = ['test_api_key' => ['title' => 'Test API key']];
+        $this->route(['GET account' => [401, '{"message":"Invalid API key. Pass a live or test key as a bearer token."}']]);
+
+        $gateway->validate_test_api_key_field('test_api_key', 'vp_test_revoked');
+
+        $this->assertSame(['GET account'], array_column($this->sent, 0));
+        $this->assertSame(['VeliraPay refused the Test API key: Invalid API key. Pass a live or test key as a bearer token. It was saved anyway; check it under Developers → API keys in the VeliraPay dashboard.'], $GLOBALS['velirapay_test_settings_errors'] ?? null);
+    }
+
+    public function test_a_key_is_not_checked_when_it_is_unchanged_or_velirapay_cannot_be_reached(): void
+    {
+        $gateway = $this->gateway();
+        $this->route(['GET account' => [503, '{"message":"Service Unavailable"}']]);
+
+        $gateway->validate_live_api_key_field('live_api_key', 'vp_live_example');
+        $this->assertSame([], $this->sent);
+
+        $gateway->validate_live_api_key_field('live_api_key', 'vp_live_other');
+        $this->assertSame(['GET account'], array_column($this->sent, 0));
+        $this->assertArrayNotHasKey('velirapay_test_settings_errors', $GLOBALS);
+    }
+
     public function test_the_webhook_url_is_always_https(): void
     {
         $GLOBALS['velirapay_test_home'] = 'http://store.example';
@@ -480,6 +519,7 @@ final class GatewayTest extends TestCase
             $GLOBALS['velirapay_test_logs'],
             $GLOBALS['velirapay_test_users'],
             $GLOBALS['velirapay_test_home'],
+            $GLOBALS['velirapay_test_settings_errors'],
         );
 
         parent::tearDown();

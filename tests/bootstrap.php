@@ -18,6 +18,8 @@ if (! class_exists('WC_Payment_Gateway')) {
     {
         public array $settings = [];
 
+        public array $form_fields = [];
+
         public string $enabled = 'yes';
 
         public function get_option(string $key): string
@@ -38,6 +40,16 @@ if (! class_exists('WC_Payment_Gateway')) {
         public function get_field_key(string $key): string
         {
             return 'woocommerce_velirapay_'.$key;
+        }
+    }
+}
+
+if (! class_exists('WC_Admin_Settings')) {
+    class WC_Admin_Settings
+    {
+        public static function add_error(string $text): void
+        {
+            $GLOBALS['velirapay_test_settings_errors'][] = $text;
         }
     }
 }
@@ -359,6 +371,26 @@ function esc_attr(string $text): string
 function esc_html__(string $text, string $domain = 'default'): string
 {
     return htmlspecialchars($text, ENT_QUOTES);
+}
+
+function esc_url(string $url): string
+{
+    return htmlspecialchars($url, ENT_QUOTES);
+}
+
+function wp_kses_post(string $text): string
+{
+    return $text;
+}
+
+function admin_url(string $path = ''): string
+{
+    return 'https://store.example/wp-admin/'.$path;
+}
+
+function current_user_can(string $capability): bool
+{
+    return true;
 }
 
 function home_url(string $path = ''): string
