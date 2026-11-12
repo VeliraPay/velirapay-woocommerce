@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace VeliraPay\WooCommerce;
 
+use InvalidArgumentException;
 use VeliraPay\WooCommerce\Api\ApiException;
 use VeliraPay\WooCommerce\Api\Client;
 use VeliraPay\WooCommerce\Orders\StatusSync;
@@ -13,6 +14,7 @@ use WC_Admin_Settings;
 use WC_Cart;
 use WC_Order;
 use WC_Payment_Gateway;
+use WP_User;
 
 /**
  * The VeliraPay payment method: each order becomes an invoice the customer pays on VeliraPay's hosted page.
@@ -283,6 +285,10 @@ final class Gateway extends WC_Payment_Gateway
 
         try {
             $invoice = $this->invoiceFor($order, $client);
+        } catch (InvalidArgumentException $exception) {
+            wc_add_notice(self::customerNotice($exception->getMessage()), 'error');
+
+            return ['result' => 'failure'];
         } catch (ApiException $exception) {
             wc_get_logger()->error(sprintf('Could not create an invoice for order #%s: %s', $order->get_order_number(), $exception->getMessage()), ['source' => Plugin::LOG_SOURCE]);
             $order->add_order_note(sprintf(
@@ -290,7 +296,7 @@ final class Gateway extends WC_Payment_Gateway
                 __('VeliraPay could not create an invoice: %s', 'velirapay-woocommerce'),
                 $exception->getMessage(),
             ));
-            wc_add_notice(__('The crypto payment could not be started. Please try again or choose another payment method.', 'velirapay-woocommerce'), 'error');
+            wc_add_notice(self::refusalNotice($exception), 'error');
 
             return ['result' => 'failure'];
         }
@@ -452,35 +458,40 @@ final class Gateway extends WC_Payment_Gateway
      * @return array<string, mixed>
      *
      * @throws ApiException
+     * @throws InvalidArgumentException when a new invoice is needed and the order has no email to make it out to.
      */
     private function invoiceFor(WC_Order $order, Client $client): array
     {
         $amount = wc_format_decimal($order->get_total(), 2);
         $currency = $order->get_currency();
         $code = WooCommerceOrder::invoiceCodeOf($order);
+        $existing = $code !== '' ? $client->retrieveInvoice($code) : null;
+        $status = $existing['status'] ?? null;
 
-        if ($code !== '') {
-            $existing = $client->retrieveInvoice($code);
-            $status = $existing['status'] ?? null;
+        if ($existing !== null && $status === 'paid') {
+            (new StatusSync)->applyInvoice(new WooCommerceOrder($order), $existing);
 
-            if ($status === 'paid') {
-                (new StatusSync)->applyInvoice(new WooCommerceOrder($order), $existing);
+            return $existing;
+        }
 
-                return $existing;
-            }
+        if ($existing !== null && $status === 'open' && ($existing['amount'] ?? null) === $amount && ($existing['currency'] ?? null) === $currency) {
+            return $existing;
+        }
 
-            if ($status === 'open' && ($existing['amount'] ?? null) === $amount && ($existing['currency'] ?? null) === $currency) {
-                return $existing;
-            }
+        $email = $this->customerEmail($order);
 
-            if ($status === 'open' && ! $this->voidOutdated($client, $order, $code, $existing)) {
-                return $existing;
-            }
+        // Checked before an outdated invoice is voided, so the customer can add one and still pay it.
+        if ($email === '') {
+            throw new InvalidArgumentException(__('an email address is needed to pay. Please enter your billing email address.', 'velirapay-woocommerce'));
+        }
 
-            // An invoice that can no longer be paid is set aside before it is replaced, as an outdated one is before its void.
-            if ($status !== 'open') {
-                WooCommerceOrder::setInvoiceAside($order, $code);
-            }
+        if ($existing !== null && $status === 'open' && ! $this->voidOutdated($client, $order, $code, $existing)) {
+            return $existing;
+        }
+
+        // An invoice that can no longer be paid is set aside before it is replaced, as an outdated one is before its void.
+        if ($existing !== null && $status !== 'open') {
+            WooCommerceOrder::setInvoiceAside($order, $code);
         }
 
         // The invoice the new one replaces: the current one, or the one a replacement that failed to be created set aside.
@@ -491,7 +502,7 @@ final class Gateway extends WC_Payment_Gateway
 
         $params = [
             'customer_name' => mb_substr($name !== '' ? $name : __('Customer', 'velirapay-woocommerce'), 0, 255),
-            'customer_email' => $order->get_billing_email(),
+            'customer_email' => $email,
             'amount' => $amount,
             'currency' => $currency,
             'memo' => mb_substr(sprintf(
@@ -519,6 +530,53 @@ final class Gateway extends WC_Payment_Gateway
         ));
 
         return $invoice;
+    }
+
+    /**
+     * Get the email the invoice is made out to: the billing email, or, for an order without one, as one created in the
+     * admin may be, the account email of the customer it is for.
+     */
+    private function customerEmail(WC_Order $order): string
+    {
+        $email = trim($order->get_billing_email());
+
+        if ($email === '' && $order->get_customer_id() > 0) {
+            $user = get_userdata($order->get_customer_id());
+            $email = $user instanceof WP_User ? trim($user->user_email) : '';
+        }
+
+        return $email;
+    }
+
+    /**
+     * Get what the customer is told when the invoice could not be created: what VeliraPay said about their email or the
+     * amount, which they can do something about, or a general notice for anything else.
+     */
+    private static function refusalNotice(ApiException $exception): string
+    {
+        if ($exception->status === 422) {
+            foreach (['customer_email', 'amount'] as $field) {
+                $message = $exception->errors[$field][0] ?? '';
+
+                if ($message !== '') {
+                    return self::customerNotice($message);
+                }
+            }
+        }
+
+        return __('The crypto payment could not be started. Please try again or choose another payment method.', 'velirapay-woocommerce');
+    }
+
+    /**
+     * Word a message for the customer at checkout, escaped.
+     */
+    private static function customerNotice(string $message): string
+    {
+        return sprintf(
+            /* translators: %s: what stopped the payment, such as "Mail cannot be delivered to this address." */
+            __('Crypto payment: %s', 'velirapay-woocommerce'),
+            esc_html($message),
+        );
     }
 
     /**

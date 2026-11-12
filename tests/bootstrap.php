@@ -321,9 +321,14 @@ function wc_format_decimal(string $value, int $decimals): string
     return number_format((float) $value, $decimals, '.', '');
 }
 
-function wc_add_notice(string $message, string $type): void
+function wc_add_notice(string $message, string $type = 'success'): void
 {
-    $GLOBALS['velirapay_test_notices'][] = [$type, $message];
+    $GLOBALS['velirapay_test_notices'][$type][] = ['notice' => $message, 'data' => []];
+}
+
+function wc_get_notices(string $type = ''): array
+{
+    return $GLOBALS['velirapay_test_notices'][$type] ?? [];
 }
 
 function get_bloginfo(string $show): string

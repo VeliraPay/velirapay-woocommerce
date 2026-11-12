@@ -17,6 +17,7 @@ use VeliraPay\WooCommerce\Webhooks\Handler;
 use VeliraPay\WooCommerce\Webhooks\Signature;
 use WC_Cart;
 use WC_Order;
+use WP_User;
 
 final class GatewayTest extends TestCase
 {
@@ -162,6 +163,85 @@ final class GatewayTest extends TestCase
         $this->assertSame('https://velirapay.com/i/oldinvoice12', $order->get_meta(WooCommerceOrder::INVOICE_URL_META));
         $this->assertSame([], WooCommerceOrder::supersededInvoiceCodesOf($order));
         $this->assertNotContains('POST invoices', array_column($this->sent, 0));
+    }
+
+    /**
+     * Fields whose refusal the customer can act on, and how VeliraPay words it.
+     *
+     * @return iterable<string, array{string, string}>
+     */
+    public static function refusalsTheCustomerCanFix(): iterable
+    {
+        yield 'an email that cannot receive mail' => ['customer_email', 'Mail cannot be delivered to this address. Check how it is spelled.'];
+        yield 'an amount under the lowest price' => ['amount', 'Enter at least €0.50.'];
+    }
+
+    #[DataProvider('refusalsTheCustomerCanFix')]
+    public function test_a_refusal_the_customer_can_fix_is_shown_at_checkout(string $field, string $message): void
+    {
+        $order = new WC_Order(1042);
+        $GLOBALS['velirapay_test_orders'] = [1042 => $order];
+        $this->route(['POST invoices' => [422, (string) json_encode(['message' => $message, 'errors' => [$field => [$message], 'memo' => ['Too long <b>memo</b>.']]])]]);
+
+        $this->assertSame(['result' => 'failure'], $this->gateway()->process_payment(1042));
+        $this->assertSame(['Crypto payment: '.esc_html($message)], array_column(wc_get_notices('error'), 'notice'));
+        $this->assertSame(['VeliraPay could not create an invoice: '.$message], array_column(wc_get_order_notes(['order_id' => 1042]), 'content'));
+    }
+
+    /**
+     * Refusals and failures the customer cannot act on.
+     *
+     * @return iterable<string, array{int, string}>
+     */
+    public static function otherFailures(): iterable
+    {
+        yield 'another field' => [422, '{"message":"The selected currency is invalid.","errors":{"currency":["The selected currency is invalid."]}}'];
+        yield 'a refused key' => [403, '{"message":"This API key does not have the invoices:write permission."}'];
+        yield 'a server error' => [500, '{"message":"Server Error"}'];
+    }
+
+    #[DataProvider('otherFailures')]
+    public function test_any_other_failure_shows_the_general_notice(int $status, string $body): void
+    {
+        $GLOBALS['velirapay_test_orders'] = [1042 => new WC_Order(1042)];
+        $this->route(['POST invoices' => [$status, $body]]);
+
+        $this->assertSame(['result' => 'failure'], $this->gateway()->process_payment(1042));
+        $this->assertSame(['The crypto payment could not be started. Please try again or choose another payment method.'], array_column(wc_get_notices('error'), 'notice'));
+    }
+
+    public function test_an_order_without_an_email_is_refused_before_asking_the_api(): void
+    {
+        $order = new WC_Order(1042);
+        $order->set_billing_email('');
+        $GLOBALS['velirapay_test_orders'] = [1042 => $order];
+        $this->route([]);
+
+        $this->assertSame(['result' => 'failure'], $this->gateway()->process_payment(1042));
+        $this->assertSame([], $this->sent);
+        $this->assertSame(['Crypto payment: an email address is needed to pay. Please enter your billing email address.'], array_column(wc_get_notices('error'), 'notice'));
+    }
+
+    public function test_an_order_without_an_email_uses_its_customers_account_email(): void
+    {
+        $order = new WC_Order(1042);
+        $order->set_billing_email('');
+        $order->set_customer_id(7);
+        $user = new WP_User;
+        $user->user_email = 'ada@example.com';
+        $GLOBALS['velirapay_test_users'] = [7 => $user];
+        $GLOBALS['velirapay_test_orders'] = [1042 => $order];
+        $bodies = [];
+        $GLOBALS['velirapay_test_http'] = static function (string $url, array $args) use (&$bodies): array {
+            $bodies[] = $args['body'] ?? null;
+
+            return ['status' => 201, 'body' => self::invoiceJson('newinvoice34', 'open', '49.90')];
+        };
+
+        $this->assertSame(['result' => 'success', 'redirect' => 'https://velirapay.com/i/newinvoice34'], $this->gateway()->process_payment(1042));
+        $this->assertCount(1, $bodies);
+        $this->assertIsString($bodies[0]);
+        $this->assertStringContainsString('"customer_email":"ada@example.com"', $bodies[0]);
     }
 
     public function test_the_method_is_not_offered_below_the_lowest_price_of_the_currency(): void
@@ -377,6 +457,7 @@ final class GatewayTest extends TestCase
             $GLOBALS['velirapay_test_schedule'],
             $GLOBALS['velirapay_test_events'],
             $GLOBALS['velirapay_test_logs'],
+            $GLOBALS['velirapay_test_users'],
         );
 
         parent::tearDown();
