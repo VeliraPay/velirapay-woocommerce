@@ -59,7 +59,7 @@ final class StatusSync
                 $seen,
                 $asset,
                 $code,
-            )),
+            ), detectedCharge: $code),
             'charge.underpaid' => $this->hold($order, sprintf(
                 /* translators: 1: amount received, 2: amount due, 3: coin, 4: charge code */
                 __('Underpaid: %1$s of %2$s %3$s received (charge %4$s). The customer can send the rest on the invoice page; if you accept the short payment in the VeliraPay dashboard instead, this order stays on hold for you to fulfil or cancel.', 'velirapay-woocommerce'),
@@ -75,12 +75,12 @@ final class StatusSync
                 $received,
                 $asset,
             )),
-            'charge.expired' => $order->addNote(sprintf(
+            'charge.expired' => $this->chargeClosed($order, $code, $charge, sprintf(
                 /* translators: %s: charge code */
                 __('Charge %s expired before it was paid. The customer can get a new quote on the invoice page.', 'velirapay-woocommerce'),
                 $code,
             )),
-            'charge.canceled' => $order->addNote(sprintf(
+            'charge.canceled' => $this->chargeClosed($order, $code, $charge, sprintf(
                 /* translators: %s: charge code */
                 __('Charge %s was canceled.', 'velirapay-woocommerce'),
                 $code,
@@ -387,16 +387,62 @@ final class StatusSync
     /**
      * Put the order on hold while a payment is confirming or short, keeping the note either way. A cancelled order is
      * never brought back: it only gets the note.
+     *
+     * @param  string  $detectedCharge  The charge a transfer was seen for, when that is why the order is held.
      */
-    private function hold(Order $order, string $note): void
+    private function hold(Order $order, string $note, string $detectedCharge = ''): void
     {
-        if ($order->isPaid() || in_array($order->status(), ['on-hold', 'cancelled'], true)) {
+        if ($order->isPaid() || $order->status() === 'cancelled') {
             $order->addNote($note);
 
             return;
         }
 
+        if ($order->status() === 'on-hold') {
+            $order->addNote($note);
+
+            // Held for more than a transfer seen on chain, so the order stays held should that transfer never confirm.
+            if ($detectedCharge === '' && ! $order->hasHandledEvent('held')) {
+                $order->rememberEvent('held');
+            }
+
+            return;
+        }
+
         $order->setStatus('on-hold', $note);
+
+        if ($detectedCharge !== '') {
+            $order->rememberEvent('detected:'.$detectedCharge);
+        }
+    }
+
+    /**
+     * Note a charge that closed unpaid, sending an order held only for a transfer to it back to waiting for payment when
+     * that transfer never confirmed: VeliraPay forgets a transfer the chain no longer knows, then closes the charge with
+     * nothing paid to it. A charge that closed with a transfer still listed is a late payment, which keeps its hold.
+     *
+     * @param  array<array-key, mixed>  $charge
+     */
+    private function chargeClosed(Order $order, string $code, array $charge, string $note): void
+    {
+        $neverConfirmed = $code !== ''
+            && ($charge['transactions'] ?? null) === []
+            && $order->status() === 'on-hold'
+            && ! $order->isPaid()
+            && $order->hasHandledEvent('detected:'.$code)
+            && ! $order->hasHandledEvent('held');
+
+        if (! $neverConfirmed) {
+            $order->addNote($note);
+
+            return;
+        }
+
+        $order->setStatus('pending', sprintf(
+            /* translators: %s: charge code */
+            __('The payment seen on chain for charge %s never confirmed, and the charge has closed, so the order is waiting for payment again: the customer can pay on the invoice page.', 'velirapay-woocommerce'),
+            $code,
+        ));
     }
 
     /**

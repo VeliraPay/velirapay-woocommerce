@@ -153,6 +153,65 @@ final class StatusSyncTest extends TestCase
         $this->assertCount(1, $paid->notes);
     }
 
+    /**
+     * The events of a charge closing unpaid.
+     *
+     * @return iterable<string, array{string, string}>
+     */
+    public static function closedCharges(): iterable
+    {
+        yield 'expired' => ['charge.expired', 'expired'];
+        yield 'canceled' => ['charge.canceled', 'canceled'];
+    }
+
+    #[DataProvider('closedCharges')]
+    public function test_an_order_held_for_a_payment_that_never_confirmed_waits_for_payment_again(string $event, string $status): void
+    {
+        $order = new FakeOrder('pending');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'charge.payment_detected', ['charge' => self::charge('pending', ['transactions' => [self::transfer('t1', false)]]), 'transaction' => self::transfer('t1', false)]);
+        // VeliraPay forgets a transfer the chain no longer knows, then closes the charge with nothing paid to it.
+        $sync->applyEvent($order, $event, ['charge' => self::charge($status, ['transactions' => []])]);
+
+        $this->assertSame('pending', $order->status);
+        $this->assertSame('The payment seen on chain for charge k3v9x2m7q8wz never confirmed, and the charge has closed, so the order is waiting for payment again: the customer can pay on the invoice page.', $order->notes[1]);
+    }
+
+    public function test_a_charge_that_closed_with_a_late_payment_leaves_its_order_on_hold(): void
+    {
+        $order = new FakeOrder('pending');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'charge.payment_detected', ['charge' => self::charge('pending', ['transactions' => [self::transfer('t1', false)]]), 'transaction' => self::transfer('t1', false)]);
+        $sync->applyEvent($order, 'charge.expired', ['charge' => self::charge('expired', ['transactions' => [self::transfer('t1', false)]])]);
+
+        $this->assertSame('on-hold', $order->status);
+    }
+
+    public function test_an_order_also_held_for_another_reason_stays_on_hold_when_the_detected_payment_never_confirms(): void
+    {
+        $order = new FakeOrder('pending');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'charge.payment_detected', ['charge' => self::charge('pending', ['transactions' => [self::transfer('t1', false)]]), 'transaction' => self::transfer('t1', false)]);
+        $sync->applySupersededEvent($order, 'invoice.paid', ['invoice' => ['code' => 'old000000000', 'number' => 'INV-0041', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR', 'charges' => [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'BTC']]]]);
+        $sync->applyEvent($order, 'charge.expired', ['charge' => self::charge('expired', ['transactions' => []])]);
+
+        $this->assertSame('on-hold', $order->status);
+    }
+
+    public function test_a_detected_payment_on_an_order_already_on_hold_is_not_what_holds_it(): void
+    {
+        $order = new FakeOrder('on-hold');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'charge.payment_detected', ['charge' => self::charge('pending', ['transactions' => [self::transfer('t1', false)]]), 'transaction' => self::transfer('t1', false)]);
+        $sync->applyEvent($order, 'charge.expired', ['charge' => self::charge('expired', ['transactions' => []])]);
+
+        $this->assertSame('on-hold', $order->status);
+    }
+
     public function test_an_underpaid_charge_puts_the_order_on_hold_with_what_was_received(): void
     {
         $order = new FakeOrder('pending');
