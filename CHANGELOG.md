@@ -23,7 +23,7 @@ All notable changes to this plugin are documented here. It follows [Semantic Ver
 - WordPress offers new versions of the plugin on its own update screens: an `Update URI` header points it at the GitHub repository, and the plugin answers its update check with the latest release's zip when it is newer, asking GitHub at most every twelve hours. Stores on 0.3.1 or earlier update to this version by hand once.
 - WordPress's privacy policy guide suggests text saying what is sent to VeliraPay and which emails VeliraPay sends customers, and the readme lists both external services the plugin calls, VeliraPay's API and GitHub's, with what it sends them and when.
 - The documentation says which emails VeliraPay sends customers despite `send_email: false`: a receipt, a short-payment notice and refund notices in live mode.
-- A version tag only publishes the plugin zip once the tests, static analysis and code style pass, `Plugin::VERSION` agrees with the plugin header, readme.txt's stable tag and the tag, and the tagged commit is on `main`.
+- A version tag only publishes the plugin zip once the tests, static analysis and code style pass, `Plugin::VERSION` agrees with the plugin header, readme.txt's stable tag and the tag, and the tagged commit is on `main`. The zip is then built and published by a job of its own that installs no dependencies, so nothing the tests install can change it or reach the release.
 
 ## 0.3.1 - 2026-11-06
 
