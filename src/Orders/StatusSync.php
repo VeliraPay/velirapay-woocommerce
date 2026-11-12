@@ -93,14 +93,23 @@ final class StatusSync
                     $asset,
                     $code,
                 ), detectedCharge: $code),
-            'charge.underpaid' => $this->hold($order, sprintf(
-                /* translators: 1: amount received, 2: amount due, 3: coin, 4: charge code */
-                __('Underpaid: %1$s of %2$s %3$s received (charge %4$s). The customer can send the rest on the invoice page; if you accept the short payment in the VeliraPay dashboard instead, this order stays on hold for you to fulfil or cancel.', 'velirapay-woocommerce'),
-                $received,
-                $due,
-                $asset,
-                $code,
-            )),
+            'charge.underpaid' => $this->hold($order, self::comesBack($order)
+                ? sprintf(
+                    /* translators: 1: amount received, 2: amount due, 3: coin, 4: charge code */
+                    __('Underpaid: %1$s of %2$s %3$s received (charge %4$s). The customer can still send the rest on the invoice page, which completes this cancelled order; if you accept the short payment in the VeliraPay dashboard instead, which you also have to do before refunding it, the order comes back on hold. Either way WooCommerce takes its stock again.', 'velirapay-woocommerce'),
+                    $received,
+                    $due,
+                    $asset,
+                    $code,
+                )
+                : sprintf(
+                    /* translators: 1: amount received, 2: amount due, 3: coin, 4: charge code */
+                    __('Underpaid: %1$s of %2$s %3$s received (charge %4$s). The customer can send the rest on the invoice page; if you accept the short payment in the VeliraPay dashboard instead, this order stays on hold for you to fulfil or cancel.', 'velirapay-woocommerce'),
+                    $received,
+                    $due,
+                    $asset,
+                    $code,
+                )),
             'charge.paid' => $order->addNote(sprintf(
                 /* translators: 1: charge code, 2: amount, 3: coin */
                 __('Charge %1$s was paid: %2$s %3$s received.', 'velirapay-woocommerce'),
@@ -126,13 +135,21 @@ final class StatusSync
                     $asset,
                     $code,
                 ))
-                : $this->holdWhileUnpaid($order, sprintf(
-                    /* translators: 1: amount, 2: coin, 3: charge code */
-                    __('A late payment of %1$s %2$s arrived on charge %3$s. It has to be accepted in the VeliraPay dashboard, whether you keep it or refund it from your wallet. Accepting it does not mark this order paid: move the order to Processing to fulfil it, or cancel it once the payment is refunded.', 'velirapay-woocommerce'),
-                    $seen,
-                    $asset,
-                    $code,
-                )),
+                : $this->holdWhileUnpaid($order, self::comesBack($order)
+                    ? sprintf(
+                        /* translators: 1: amount, 2: coin, 3: charge code */
+                        __('A late payment of %1$s %2$s arrived on charge %3$s. It has to be accepted in the VeliraPay dashboard, whether you keep it or refund it from your wallet, and accepting it brings this cancelled order back on hold, where WooCommerce takes its stock again: move it to Processing to fulfil it, or cancel it again once the payment is refunded.', 'velirapay-woocommerce'),
+                        $seen,
+                        $asset,
+                        $code,
+                    )
+                    : sprintf(
+                        /* translators: 1: amount, 2: coin, 3: charge code */
+                        __('A late payment of %1$s %2$s arrived on charge %3$s. It has to be accepted in the VeliraPay dashboard, whether you keep it or refund it from your wallet. Accepting it does not mark this order paid: move the order to Processing to fulfil it, or cancel it once the payment is refunded.', 'velirapay-woocommerce'),
+                        $seen,
+                        $asset,
+                        $code,
+                    )),
             'charge.refunded' => $order->addNote(sprintf(
                 /* translators: 1: charge code, 2: amount, 3: coin */
                 __('A refund was recorded on charge %1$s: %2$s %3$s refunded in total.', 'velirapay-woocommerce'),
@@ -240,9 +257,9 @@ final class StatusSync
 
     /**
      * Record the payment with the charge that paid the invoice, once, moving an order still waiting for payment, or a
-     * cancelled one, as WooCommerce's payment_complete() does. An order the invoice no longer covers, or whose invoice was
-     * paid by accepting a short or late payment, is held instead, a cancelled one included, and any other order is only
-     * noted.
+     * cancelled one, as WooCommerce's payment_complete() does. An order the invoice no longer covers is held instead, in
+     * any status, and one whose invoice was paid by accepting a short or late payment is held when it is one of those;
+     * an order in any other status is only noted.
      *
      * @param  array<array-key, mixed>  $invoice
      */
@@ -516,6 +533,14 @@ final class StatusSync
             __('The payment seen on chain for charge %s never confirmed, and the charge has closed, so the order is waiting for payment again: the customer can pay on the invoice page.', 'velirapay-woocommerce'),
             $code,
         ));
+    }
+
+    /**
+     * Determine if the order was cancelled without being paid, so its invoice being paid brings it back.
+     */
+    private static function comesBack(Order $order): bool
+    {
+        return $order->status() === 'cancelled' && ! $order->isPaid();
     }
 
     /**

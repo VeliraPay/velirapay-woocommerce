@@ -272,19 +272,33 @@ final class StatusSyncTest extends TestCase
             (new StatusSync)->applyEvent($order, 'charge.late_payment', ['charge' => self::charge($chargeStatus), 'transaction' => ['amount' => '0.001000000000000000']]);
 
             $this->assertSame('on-hold', $order->status, "A {$status} order");
-            $this->assertCount(1, $order->notes);
-            $this->assertStringStartsWith('A late payment of 0.001 BTC arrived on charge k3v9x2m7q8wz', $order->notes[0]);
+            $this->assertSame(['A late payment of 0.001 BTC arrived on charge k3v9x2m7q8wz. It has to be accepted in the VeliraPay dashboard, whether you keep it or refund it from your wallet. Accepting it does not mark this order paid: move the order to Processing to fulfil it, or cancel it once the payment is refunded.'], $order->notes, "A {$status} order");
         }
     }
 
-    public function test_a_late_payment_only_adds_a_note_to_a_cancelled_order(): void
+    public function test_a_late_payment_only_adds_a_note_to_a_cancelled_order_saying_accepting_it_brings_the_order_back(): void
+    {
+        $order = new FakeOrder('cancelled');
+        $paid = new FakeOrder('cancelled');
+        $paid->hasPaymentDate = true;
+
+        (new StatusSync)->applyEvent($order, 'charge.late_payment', ['charge' => self::charge('expired'), 'transaction' => ['amount' => '0.001000000000000000']]);
+        (new StatusSync)->applyEvent($paid, 'charge.late_payment', ['charge' => self::charge('expired'), 'transaction' => ['amount' => '0.001000000000000000']]);
+
+        $this->assertSame('cancelled', $order->status);
+        $this->assertSame(['A late payment of 0.001 BTC arrived on charge k3v9x2m7q8wz. It has to be accepted in the VeliraPay dashboard, whether you keep it or refund it from your wallet, and accepting it brings this cancelled order back on hold, where WooCommerce takes its stock again: move it to Processing to fulfil it, or cancel it again once the payment is refunded.'], $order->notes);
+        $this->assertSame('cancelled', $paid->status);
+        $this->assertStringContainsString('Accepting it does not mark this order paid', $paid->notes[0]);
+    }
+
+    public function test_an_underpaid_charge_only_adds_a_note_to_a_cancelled_order_saying_what_paying_or_accepting_it_does(): void
     {
         $order = new FakeOrder('cancelled');
 
-        (new StatusSync)->applyEvent($order, 'charge.late_payment', ['charge' => self::charge('expired'), 'transaction' => ['amount' => '0.001000000000000000']]);
+        (new StatusSync)->applyEvent($order, 'charge.underpaid', ['charge' => self::charge('underpaid', ['received_amount' => '0.002000000000000000'])]);
 
         $this->assertSame('cancelled', $order->status);
-        $this->assertCount(1, $order->notes);
+        $this->assertSame(['Underpaid: 0.002 of 0.0025 BTC received (charge k3v9x2m7q8wz). The customer can still send the rest on the invoice page, which completes this cancelled order; if you accept the short payment in the VeliraPay dashboard instead, which you also have to do before refunding it, the order comes back on hold. Either way WooCommerce takes its stock again.'], $order->notes);
     }
 
     public function test_an_invoice_paid_by_accepting_a_late_payment_holds_the_order_instead_of_completing_it(): void
@@ -493,17 +507,17 @@ final class StatusSyncTest extends TestCase
         $this->assertNull($order->transactionId);
     }
 
-    public function test_a_paid_invoice_leaves_a_trashed_order_alone(): void
+    public function test_a_paid_invoice_only_notes_an_unpaid_order_in_a_custom_status(): void
     {
-        $order = new FakeOrder('trash');
+        $order = new FakeOrder('awaiting-approval');
         $sync = new StatusSync;
 
         $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']])]);
         $sync->applyInvoice($order, self::invoice('paid', [['id' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']]));
 
-        $this->assertSame('trash', $order->status);
+        $this->assertSame('awaiting-approval', $order->status);
         $this->assertNull($order->transactionId);
-        $this->assertSame(['VeliraPay invoice INV-0042 was paid (charge z8x6c4v2b0nm) while this order was trash, so its status was left alone.'], $order->notes);
+        $this->assertSame(['VeliraPay invoice INV-0042 was paid (charge z8x6c4v2b0nm) while this order was awaiting-approval, so its status was left alone.'], $order->notes);
     }
 
     /**

@@ -738,8 +738,9 @@ final class Plugin
     }
 
     /**
-     * Say why an invoice VeliraPay refused to void stays payable. A paid or voided one needs nothing said, since
-     * VeliraPay reports on it; an open one has a short payment, or one still confirming.
+     * Say why an invoice VeliraPay refused to void stays payable, and on a cancelled order that was never paid, what its
+     * being paid does to it. A paid or voided one needs nothing said, since VeliraPay reports on it; an open one has a
+     * short payment, or one still confirming.
      */
     private static function explainUnvoidable(Client $client, ?WC_Order $order, string $code): void
     {
@@ -749,13 +750,21 @@ final class Plugin
             return;
         }
 
-        if (($invoice['status'] ?? null) === 'open') {
-            self::noteVoid($order, $code, sprintf(
+        if (($invoice['status'] ?? null) !== 'open') {
+            return;
+        }
+
+        self::noteVoid($order, $code, $order instanceof WC_Order && $order->has_status('cancelled') && $order->get_date_paid() === null
+            ? sprintf(
+                /* translators: %s: invoice code */
+                __('VeliraPay invoice %s could not be voided: a short payment, or one still confirming, keeps it payable. Check it in the VeliraPay dashboard, where a short payment has to be accepted before it can be refunded. Accepting a short payment brings this order back on hold, and a payment that completes the invoice brings it back to Processing; WooCommerce takes its stock again either way.', 'velirapay-woocommerce'),
+                $code,
+            )
+            : sprintf(
                 /* translators: %s: invoice code */
                 __('VeliraPay invoice %s could not be voided: a short payment, or one still confirming, keeps it payable. Check it in the VeliraPay dashboard, where a short payment has to be accepted before it can be refunded.', 'velirapay-woocommerce'),
                 $code,
             ));
-        }
     }
 
     /**

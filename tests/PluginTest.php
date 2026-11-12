@@ -213,8 +213,29 @@ final class PluginTest extends TestCase
 
         Plugin::voidInvoiceOfCancelledOrder(1042, $order);
 
-        $this->assertSame(['VeliraPay invoice invoice1042 could not be voided: a short payment, or one still confirming, keeps it payable. Check it in the VeliraPay dashboard, where a short payment has to be accepted before it can be refunded.'], array_column(wc_get_order_notes(['order_id' => 1042]), 'content'));
+        $this->assertSame(['VeliraPay invoice invoice1042 could not be voided: a short payment, or one still confirming, keeps it payable. Check it in the VeliraPay dashboard, where a short payment has to be accepted before it can be refunded. Accepting a short payment brings this order back on hold, and a payment that completes the invoice brings it back to Processing; WooCommerce takes its stock again either way.'], array_column(wc_get_order_notes(['order_id' => 1042]), 'content'));
         $this->assertSame([], $GLOBALS['velirapay_test_events'] ?? []);
+    }
+
+    public function test_a_void_refused_for_an_order_its_invoice_cannot_bring_back_does_not_say_it_would(): void
+    {
+        $trashed = $this->pendingOrder();
+        $trashed->set_status('trash');
+        $paid = $this->pendingOrder(1043);
+        $paid->set_status('cancelled');
+        $paid->set_date_paid('2026-11-01T10:00:00+00:00');
+        $this->route([
+            'POST invoices/invoice1042/void' => [409, '{"message":"Only open invoices without a payment on its way can be voided."}'],
+            'GET invoices/invoice1042' => [200, '{"data":{"id":"invoice1042","status":"open","charges":[{"id":"k3v9x2m7q8wz","status":"underpaid","asset":"BTC"}]}}'],
+            'POST invoices/invoice1043/void' => [409, '{"message":"Only open invoices without a payment on its way can be voided."}'],
+            'GET invoices/invoice1043' => [200, '{"data":{"id":"invoice1043","status":"open","charges":[{"id":"m2q7w4e9r1ty","status":"underpaid","asset":"BTC"}]}}'],
+        ]);
+
+        Plugin::retryVoid(1042, 'invoice1042', 1);
+        Plugin::voidInvoiceOfCancelledOrder(1043, $paid);
+
+        $this->assertSame(['VeliraPay invoice invoice1042 could not be voided: a short payment, or one still confirming, keeps it payable. Check it in the VeliraPay dashboard, where a short payment has to be accepted before it can be refunded.'], array_column(wc_get_order_notes(['order_id' => 1042]), 'content'));
+        $this->assertSame(['VeliraPay invoice invoice1043 could not be voided: a short payment, or one still confirming, keeps it payable. Check it in the VeliraPay dashboard, where a short payment has to be accepted before it can be refunded.'], array_column(wc_get_order_notes(['order_id' => 1043]), 'content'));
     }
 
     public function test_a_void_refused_because_the_invoice_is_already_settled_adds_no_note(): void

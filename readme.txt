@@ -72,7 +72,7 @@ It stays "Pending payment" with the invoice's number and link in its notes. When
 
 = Does cancelling an order stop the payment? =
 
-Cancelling an order voids its invoice, so the hosted page no longer takes payment. An invoice with a payment already on its way cannot be voided. If that invoice is paid after all, the order is brought back as a pending one would be: it goes "Processing", or "On hold" when the invoice was paid by accepting a short or late payment, and WooCommerce takes its stock again. Until then, news of the payment only adds notes to the cancelled order.
+Cancelling an order voids its invoice, so the hosted page no longer takes payment. An invoice with a payment already on its way cannot be voided. If that invoice is paid after all, the order is brought back as a pending one would be, once VeliraPay's invoice.paid webhook arrives or you choose "Check VeliraPay status" (the hourly check and the order-received page skip cancelled orders): it goes "Processing", or "On hold" when the invoice was paid by accepting a short or late payment, and WooCommerce takes its stock again. Until then, news of the payment only adds notes to the cancelled order.
 
 = What if the customer pays too little, or too late? =
 
