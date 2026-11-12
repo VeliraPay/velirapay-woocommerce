@@ -76,6 +76,10 @@ Yes. Turn on test mode and use a test API key and a test endpoint: payments then
 
 An order with an existing invoice keeps that invoice when you switch modes or accounts. To retry or check such an order, restore the original mode and account's API key; a live invoice is never replaced with a test invoice.
 
+= How is the plugin updated? =
+
+From 0.4.0 on, WordPress offers new versions on its Plugins and Updates screens like any other plugin's, from the plugin's GitHub releases rather than WordPress.org. A store on 0.3.1 or earlier installs 0.4.0 by hand once.
+
 = How are refunds handled? =
 
 By hand. Send the coins back from your wallet and record the refund in the VeliraPay dashboard; the plugin adds a note to the order.

@@ -20,6 +20,7 @@ All notable changes to this plugin are documented here. It follows [Semantic Ver
 - The settings page always shows the webhook URL with `https://`, which VeliraPay requires, and warns when the site's own address is still `http://`.
 - A new API key is checked with VeliraPay when the settings are saved: one that is invalid or revoked, refused from the store's address, or without `invoices:read` is reported on the settings page, and saved anyway. A key VeliraPay refuses later, such as one without `invoices:write` at checkout, shows in an admin notice until a request of the same kind succeeds, rather than only in the failed order's notes.
 - Order notes name a token, or a coin on another chain, by its ticker and network, such as "USDT (Tron)" or "ETH (Base)", instead of its code, and a Lightning payment is noted as final rather than waiting for confirmations.
+- WordPress offers new versions of the plugin on its own update screens: an `Update URI` header points it at the GitHub repository, and the plugin answers its update check with the latest release's zip when it is newer, asking GitHub at most every twelve hours. Stores on 0.3.1 or earlier update to this version by hand once.
 
 ## 0.3.1 - 2026-11-06
 

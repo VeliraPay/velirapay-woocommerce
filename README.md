@@ -27,6 +27,8 @@ The official WooCommerce plugin for [VeliraPay](https://velirapay.com), the cryp
 
 Download the latest zip from the [releases](https://github.com/VeliraPay/velirapay-woocommerce/releases) and upload it under **Plugins → Add New → Upload Plugin**, or put the folder in `wp-content/plugins/`. The plugin has no runtime dependencies and needs no `composer install`.
 
+From 0.4.0 on, WordPress offers new versions on its own **Plugins** and **Updates** screens, and can update the plugin automatically if you let it. The plugin's `Update URI` header points WordPress at this repository instead of WordPress.org, and the plugin answers its update check with the latest GitHub release: only a newer version, only with its `velirapay-woocommerce-<version>.zip`, and only from `https://github.com/VeliraPay/velirapay-woocommerce/releases/download/`. GitHub is asked at most every twelve hours, with a five-second timeout, and a failure only means no update is offered until the next check. A store on 0.3.1 or earlier has to install 0.4.0 by hand once.
+
 To build the zip yourself:
 
 ```bash

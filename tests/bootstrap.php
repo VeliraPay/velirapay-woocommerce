@@ -419,12 +419,12 @@ function wc_get_logger(): object
     };
 }
 
-function wp_remote_request(string $url, array $args): array
+function wp_remote_request(string $url, array $args): array|WP_Error
 {
     return ($GLOBALS['velirapay_test_http'])($url, $args);
 }
 
-function wp_remote_get(string $url, array $args): array
+function wp_remote_get(string $url, array $args): array|WP_Error
 {
     return ($GLOBALS['velirapay_test_http'])($url, $args);
 }
