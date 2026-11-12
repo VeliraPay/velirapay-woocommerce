@@ -105,8 +105,6 @@ final class Plugin
         // Fired while plugins load, so it has to be listened for before then.
         add_action('woocommerce_blocks_loaded', [self::class, 'registerBlocksIntegration']);
         add_action('plugins_loaded', [self::class, 'init']);
-        // Updates are offered whether or not WooCommerce is active, from the release the plugin's Update URI points at.
-        add_filter('update_plugins_github.com', [new Updater(plugin_basename($file)), 'check'], 10, 3);
         register_deactivation_hook($file, [self::class, 'deactivate']);
     }
 

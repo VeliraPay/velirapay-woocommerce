@@ -424,11 +424,6 @@ function wp_remote_request(string $url, array $args): array|WP_Error
     return ($GLOBALS['velirapay_test_http'])($url, $args);
 }
 
-function wp_remote_get(string $url, array $args): array|WP_Error
-{
-    return ($GLOBALS['velirapay_test_http'])($url, $args);
-}
-
 function is_wp_error(mixed $value): bool
 {
     return $value instanceof WP_Error;
@@ -560,18 +555,6 @@ function set_transient(string $name, mixed $value, int $expiration = 0): bool
 function delete_transient(string $name): bool
 {
     unset($GLOBALS['velirapay_test_transients'][$name]);
-
-    return true;
-}
-
-function get_site_transient(string $name): mixed
-{
-    return $GLOBALS['velirapay_test_transients'][$name] ?? false;
-}
-
-function set_site_transient(string $name, mixed $value, int $expiration = 0): bool
-{
-    $GLOBALS['velirapay_test_transients'][$name] = $value;
 
     return true;
 }

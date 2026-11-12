@@ -39,7 +39,7 @@ This plugin connects to VeliraPay's API, https://api.velirapay.com, the crypto p
 
 The customer then pays on VeliraPay's hosted invoice page, and VeliraPay sends the store signed webhooks about the invoice. VeliraPay's terms of service: https://velirapay.com/terms. Its privacy policy: https://velirapay.com/privacy.
 
-To offer new versions of itself, the plugin also asks GitHub's API, https://api.github.com, for its latest release, at most every twelve hours. The request names the plugin and its version, and nothing about the store or its customers. GitHub's terms of service: https://docs.github.com/site-policy/github-terms/github-terms-of-service. Its privacy statement: https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement.
+The plugin calls no other service.
 
 == Installation ==
 
@@ -96,7 +96,7 @@ The invoice itself is not emailed: the customer is sent straight to its page. In
 
 = How is the plugin updated? =
 
-From 0.4.0 on, WordPress offers new versions on its Plugins and Updates screens like any other plugin's, from the plugin's GitHub releases rather than WordPress.org. A store on 0.3.1 or earlier installs 0.4.0 by hand once.
+From WordPress.org, once the plugin is listed there: WordPress then offers each new version on its Plugins and Updates screens like any other plugin's. Until then, a new version is installed by uploading its zip from https://github.com/VeliraPay/velirapay-woocommerce/releases under Plugins → Add New Plugin → Upload Plugin.
 
 = How are refunds handled? =
 
