@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.3
 WC tested up to: 11.3
-Stable tag: 0.4.0
+Stable tag: 0.4.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -103,6 +103,9 @@ From WordPress.org, once the plugin is listed there: WordPress then offers each 
 By hand. Send the coins back from your wallet and record the refund in the VeliraPay dashboard; the plugin adds a note to the order.
 
 == Changelog ==
+
+= 0.4.1 =
+* The invoice's page sends the customer back to the store: a button to the order-received page once they have paid, and a link back to the order's payment page until then.
 
 = 0.4.0 =
 * A late payment puts an order still waiting for payment on hold, so the "Hold stock" timer no longer cancels it and voids its invoice meanwhile.
