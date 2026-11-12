@@ -17,6 +17,7 @@ The official WooCommerce plugin for [VeliraPay](https://velirapay.com), the cryp
 - [Emails to customers](#emails-to-customers)
 - [Privacy and external services](#privacy-and-external-services)
 - [Development](#development)
+- [Releases](#releases)
 
 ## Requirements
 
@@ -164,6 +165,14 @@ composer lint        # Pint
 ```
 
 The API client, the signature check, the status mapping and the webhook handler are plain PHP, tested without WordPress: HTTP goes through an injected transport and the order behind a small interface.
+
+CI also builds the zip and runs WordPress's [Plugin Check](https://wordpress.org/plugins/plugin-check/), which WordPress.org reviews plugins with, on the plugin it holds, and fails on any error.
+
+## Releases
+
+A release starts from a version tag, `v<version>`, on a commit on `main`. The tag, the plugin header's `Version`, `Plugin::VERSION` and readme.txt's `Stable tag` must agree, and the tests, static analysis and code style must pass. The release workflow then builds the zip with `bin/build.sh` and publishes it as the tag's GitHub release, with the version's section of CHANGELOG.md as its notes.
+
+It then deploys the same files to the plugin's Subversion repository on WordPress.org, `https://plugins.svn.wordpress.org/velirapay-for-woocommerce/`, as `trunk` and as the version's tag, with [10up's deploy action](https://github.com/10up/action-wordpress-plugin-deploy). The listing's banners and icons come from `.wordpress-org`, which stays out of the zip. WordPress.org offers the version to every site once readme.txt's `Stable tag` names it, which the tag check makes sure of. The deploy needs two repository secrets, `SVN_USERNAME`, the WordPress.org username with commit access to the plugin, and `SVN_PASSWORD`, the SVN password set under **Account & Security** in its WordPress.org profile. While they are not set, as until WordPress.org approves the plugin, the deploy's steps are skipped and a tag only publishes the GitHub release. Once they are, re-running the **Deploy to WordPress.org** job of a tag's release run deploys that version.
 
 ## License
 

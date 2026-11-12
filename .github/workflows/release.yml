@@ -85,3 +85,47 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${GITHUB_REF_NAME}" "build/velirapay-for-woocommerce-${GITHUB_REF_NAME#v}.zip" --repo "${GITHUB_REPOSITORY}" --verify-tag --title "${GITHUB_REF_NAME}" --notes-file "${RUNNER_TEMP}/notes.md"
+
+  wordpress-org:
+    name: Deploy to WordPress.org
+    needs: release
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      # Secrets cannot decide whether a job runs, so its steps are skipped while they are not set, and the job passes.
+      - name: Check for the SVN credentials
+        id: credentials
+        env:
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+        run: |
+          if [ -n "${SVN_USERNAME}" ] && [ -n "${SVN_PASSWORD}" ]; then
+            echo "configured=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::notice title=Not deployed to WordPress.org::The SVN_USERNAME and SVN_PASSWORD secrets are not set, so ${GITHUB_REF_NAME} was only released on GitHub."
+          fi
+
+      - name: Checkout code
+        if: steps.credentials.outputs.configured == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the plugin
+        if: steps.credentials.outputs.configured == 'true'
+        run: |
+          zip=$(bash bin/build.sh)
+          unzip -q "${zip}" -d build
+
+      - name: Deploy to WordPress.org
+        if: steps.credentials.outputs.configured == 'true'
+        uses: 10up/action-wordpress-plugin-deploy@54bd289b8525fd23a5c365ec369185f2966529c2 # 2.3.0
+        env:
+          SLUG: velirapay-for-woocommerce
+          BUILD_DIR: build/velirapay-for-woocommerce
+          ASSETS_DIR: .wordpress-org
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
