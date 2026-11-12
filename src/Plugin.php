@@ -57,6 +57,17 @@ final class Plugin
     private const SYNC_DAYS = 3;
 
     /**
+     * How many minutes past WooCommerce's hold stock window an order is kept while VeliraPay cannot be asked about it:
+     * the 30-minute rate lock a customer may have started at the last moment, and an hour for the payment to confirm.
+     */
+    private const UNREACHABLE_GRACE_MINUTES = 90;
+
+    /**
+     * The transient saying VeliraPay could not be reached a moment ago, so the hold stock timer waits on it once a run.
+     */
+    private const UNREACHABLE_TRANSIENT = 'velirapay_api_unreachable';
+
+    /**
      * The main plugin file.
      */
     private static string $file = '';
@@ -100,6 +111,7 @@ final class Plugin
         add_filter('woocommerce_payment_gateways', [self::class, 'registerGateway']);
         add_action('woocommerce_api_'.Gateway::ID, [self::class, 'receiveWebhook']);
         add_action('woocommerce_order_status_cancelled', [self::class, 'voidInvoiceOfCancelledOrder'], 10, 2);
+        add_filter('woocommerce_cancel_unpaid_order', [self::class, 'keepOrderBeingPaid'], 10, 2);
         add_filter('woocommerce_order_actions', [self::class, 'addOrderAction'], 10, 2);
         add_action('woocommerce_order_action_'.self::CHECK_STATUS_ACTION, [self::class, 'checkStatus']);
         add_action('template_redirect', [self::class, 'syncOnOrderReceivedPage'], 10);
@@ -200,6 +212,53 @@ final class Plugin
                 ));
             }
         }
+    }
+
+    /**
+     * Keep WooCommerce's hold stock timer from cancelling an order whose invoice a customer is paying: a charge inside
+     * its rate lock, a transfer confirming or a short payment. An invoice found paid is applied instead. The filter only
+     * ever vetoes, and leaves the timer alone when VeliraPay will never answer for the invoice, such as after the key
+     * was revoked or the mode switched.
+     */
+    public static function keepOrderBeingPaid(mixed $shouldCancel, mixed $order = null): mixed
+    {
+        if ($shouldCancel !== true || ! $order instanceof WC_Order || $order->get_payment_method() !== Gateway::ID) {
+            return $shouldCancel;
+        }
+
+        $code = WooCommerceOrder::invoiceCodeOf($order);
+        $client = self::gateway()->client();
+
+        if ($code === '' || $client === null) {
+            return $shouldCancel;
+        }
+
+        if (get_transient(self::UNREACHABLE_TRANSIENT) !== false) {
+            return self::mayStillBePaid($order) ? false : $shouldCancel;
+        }
+
+        try {
+            $invoice = $client->retrieveInvoice($code);
+        } catch (ApiException $exception) {
+            if (! self::isTemporary($exception)) {
+                return $shouldCancel;
+            }
+
+            // Asked once a run: the timer goes through every unpaid order, and each would wait as long again.
+            set_transient(self::UNREACHABLE_TRANSIENT, 1, MINUTE_IN_SECONDS);
+
+            return self::mayStillBePaid($order) ? false : $shouldCancel;
+        }
+
+        $status = $invoice['status'] ?? null;
+
+        if ($status === 'paid' || ($status === 'open' && self::hasPaymentInProgress($invoice))) {
+            (new StatusSync)->applyInvoice(new WooCommerceOrder($order), $invoice);
+
+            return false;
+        }
+
+        return $shouldCancel;
     }
 
     /**
@@ -461,6 +520,44 @@ final class Plugin
         (new StatusSync)->applyInvoice(new WooCommerceOrder($order), $invoice);
 
         return $invoice;
+    }
+
+    /**
+     * Determine if a failure may clear up on its own: VeliraPay could not be reached, was busy or failed.
+     */
+    private static function isTemporary(ApiException $exception): bool
+    {
+        return $exception->status === 0 || $exception->status === 429 || $exception->status >= 500;
+    }
+
+    /**
+     * Determine if an order is young enough for a customer to still be paying it: inside WooCommerce's hold stock window,
+     * plus a rate lock started at its end and the time the payment takes to confirm.
+     */
+    private static function mayStillBePaid(WC_Order $order): bool
+    {
+        $created = $order->get_date_created();
+        $holdMinutes = get_option('woocommerce_hold_stock_minutes', 60);
+        $holdMinutes = is_numeric($holdMinutes) ? (int) $holdMinutes : 60;
+
+        return $created !== null && $created->getTimestamp() > time() - ($holdMinutes + self::UNREACHABLE_GRACE_MINUTES) * MINUTE_IN_SECONDS;
+    }
+
+    /**
+     * Determine if an open invoice has a charge a customer is paying: inside its rate lock or with a transfer confirming
+     * (pending), or short of the amount due (underpaid).
+     *
+     * @param  array<string, mixed>  $invoice
+     */
+    private static function hasPaymentInProgress(array $invoice): bool
+    {
+        foreach (is_array($invoice['charges'] ?? null) ? $invoice['charges'] : [] as $charge) {
+            if (is_array($charge) && in_array($charge['status'] ?? null, ['pending', 'underpaid'], true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

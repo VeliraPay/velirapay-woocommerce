@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace VeliraPay\WooCommerce\Tests;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use VeliraPay\WooCommerce\Gateway;
@@ -13,6 +14,20 @@ use WC_Order;
 
 final class PluginTest extends TestCase
 {
+    /**
+     * The URL of each request the HTTP double answered.
+     *
+     * @var list<string>
+     */
+    private array $requests = [];
+
+    /**
+     * The orders in the store double, by ID.
+     *
+     * @var array<int, WC_Order>
+     */
+    private array $orders = [];
+
     public function test_polling_continues_past_fifty_orders_without_skipping_failed_or_changed_orders(): void
     {
         $orders = [];
@@ -57,11 +72,138 @@ final class PluginTest extends TestCase
     }
 
     /**
+     * Charges that mean a customer is paying the invoice: inside the rate lock, a transfer confirming, or short.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function paymentsInProgress(): iterable
+    {
+        yield 'a charge awaiting payment or confirming' => ['pending'];
+        yield 'a short payment' => ['underpaid'];
+    }
+
+    #[DataProvider('paymentsInProgress')]
+    public function test_the_hold_stock_timer_does_not_cancel_an_order_whose_invoice_is_being_paid(string $chargeStatus): void
+    {
+        $order = $this->pendingOrder();
+        $this->answer(200, (string) json_encode(['data' => ['id' => 'invoice1042', 'status' => 'open', 'amount' => '49.90', 'currency' => 'EUR', 'charges' => [
+            ['id' => 'oldcharge000', 'status' => 'expired', 'asset' => 'ETH'],
+            ['id' => 'k3v9x2m7q8wz', 'status' => $chargeStatus, 'asset' => 'BTC'],
+        ]]]));
+
+        $this->assertFalse(Plugin::keepOrderBeingPaid(true, $order));
+        $this->assertSame($chargeStatus === 'underpaid' ? 'on-hold' : 'pending', $order->get_status());
+        $this->assertSame(['https://api.velirapay.com/v1/invoices/invoice1042'], $this->requests);
+    }
+
+    public function test_the_hold_stock_timer_marks_an_order_paid_instead_of_cancelling_it_when_its_invoice_was_paid(): void
+    {
+        $order = $this->pendingOrder();
+        $this->answer(200, '{"data":{"id":"invoice1042","number":"INV-0042","status":"paid","amount":"49.90","currency":"EUR","charges":[{"id":"k3v9x2m7q8wz","status":"paid","asset":"BTC"}]}}');
+
+        $this->assertFalse(Plugin::keepOrderBeingPaid(true, $order));
+        $this->assertSame('processing', $order->get_status());
+    }
+
+    /**
+     * Invoices nobody is paying, and answers that never change.
+     *
+     * @return iterable<string, array{int, string}>
+     */
+    public static function nothingToWaitFor(): iterable
+    {
+        yield 'an open invoice whose quotes ran out' => [200, '{"data":{"id":"invoice1042","status":"open","charges":[{"id":"k3v9x2m7q8wz","status":"expired","asset":"BTC"}]}}'];
+        yield 'an open invoice no coin was picked for' => [200, '{"data":{"id":"invoice1042","status":"open","charges":[]}}'];
+        yield 'a voided invoice' => [200, '{"data":{"id":"invoice1042","status":"void","charges":[]}}'];
+        yield 'an invoice of the other mode or account' => [404, '{"message":"No such object."}'];
+        yield 'a revoked key' => [401, '{"message":"Invalid API key."}'];
+        yield 'a key without the permission' => [403, '{"message":"This API key does not have the invoices:read permission."}'];
+    }
+
+    #[DataProvider('nothingToWaitFor')]
+    public function test_the_hold_stock_timer_cancels_an_order_nobody_is_paying(int $status, string $body): void
+    {
+        $order = $this->pendingOrder();
+        $this->answer($status, $body);
+
+        $this->assertTrue(Plugin::keepOrderBeingPaid(true, $order));
+        $this->assertSame('pending', $order->get_status());
+    }
+
+    public function test_while_the_api_cannot_be_reached_only_orders_young_enough_to_be_being_paid_are_kept(): void
+    {
+        update_option('woocommerce_hold_stock_minutes', '60');
+        $young = $this->pendingOrder();
+        $young->set_date_created(gmdate('c', time() - 149 * 60));
+        $old = $this->pendingOrder(1043);
+        $old->set_date_created(gmdate('c', time() - 151 * 60));
+        $this->answer(503, '{"message":"Try later."}');
+
+        $this->assertFalse(Plugin::keepOrderBeingPaid(true, $young));
+        $this->assertTrue(Plugin::keepOrderBeingPaid(true, $old));
+        $this->assertCount(1, $this->requests);
+    }
+
+    public function test_the_hold_stock_timer_is_left_alone_for_orders_it_would_not_cancel_or_that_are_not_paid_with_velirapay(): void
+    {
+        $other = $this->pendingOrder();
+        $other->set_payment_method('cod');
+        $unpaid = $this->pendingOrder(1043);
+        $unpaid->delete_meta_data(WooCommerceOrder::INVOICE_CODE_META);
+        $this->answer(200, '{"data":{"id":"invoice1042","status":"open","charges":[{"id":"k3v9x2m7q8wz","status":"pending","asset":"BTC"}]}}');
+
+        $this->assertFalse(Plugin::keepOrderBeingPaid(false, $this->pendingOrder(1044)));
+        $this->assertTrue(Plugin::keepOrderBeingPaid(true, $other));
+        $this->assertTrue(Plugin::keepOrderBeingPaid(true, $unpaid));
+        $this->assertSame([], $this->requests);
+    }
+
+    /**
+     * Create a pending order paid with VeliraPay through the checkout, with an invoice, and a live-mode gateway.
+     */
+    private function pendingOrder(int $id = 1042): WC_Order
+    {
+        $order = new WC_Order($id);
+        $order->update_meta_data(WooCommerceOrder::INVOICE_CODE_META, 'invoice'.$id);
+        $order->set_date_created(gmdate('c'));
+        $this->orders[$id] = $order;
+        $GLOBALS['velirapay_test_orders'] = $this->orders;
+
+        $gateway = (new ReflectionClass(Gateway::class))->newInstanceWithoutConstructor();
+        $gateway->settings = ['live_api_key' => 'vp_live_example'];
+        $GLOBALS['velirapay_test_gateway'] = $gateway;
+
+        return $order;
+    }
+
+    /**
+     * Answer every request the same way, recording each URL.
+     */
+    private function answer(int $status, string $body): void
+    {
+        $this->requests = [];
+        $GLOBALS['velirapay_test_http'] = function (string $url) use ($status, $body): array {
+            $this->requests[] = $url;
+
+            return ['status' => $status, 'body' => $body];
+        };
+    }
+
+    /**
      * Clear the store, scheduler and HTTP doubles after polling.
      */
     protected function tearDown(): void
     {
-        unset($GLOBALS['velirapay_test_orders'], $GLOBALS['velirapay_test_gateway'], $GLOBALS['velirapay_test_http'], $GLOBALS['velirapay_test_options'], $GLOBALS['velirapay_test_schedule']);
+        unset(
+            $GLOBALS['velirapay_test_orders'],
+            $GLOBALS['velirapay_test_gateway'],
+            $GLOBALS['velirapay_test_http'],
+            $GLOBALS['velirapay_test_options'],
+            $GLOBALS['velirapay_test_schedule'],
+            $GLOBALS['velirapay_test_events'],
+            $GLOBALS['velirapay_test_transients'],
+            $GLOBALS['velirapay_test_logs'],
+        );
 
         parent::tearDown();
     }

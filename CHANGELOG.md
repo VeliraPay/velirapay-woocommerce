@@ -9,6 +9,7 @@ All notable changes to this plugin are documented here. It follows [Semantic Ver
 - A cancelled order is never brought back: a paid invoice, a detected or short payment, or a check from the order screen only add a note to it. Previously a paid invoice moved it to Processing.
 - The notes on short and late payments say what accepting them in the VeliraPay dashboard does to the order.
 - The method is only offered when the total reaches the currency's lowest price (0.50 USD, EUR, GBP or CHF, 0.70 CAD, 0.80 AUD, 25.00 TRY), which VeliraPay refused an invoice under, and a coin the account takes can be paid for it, which the hosted page otherwise had none of. The coins on offer come from `GET /v1/assets`, remembered for ten minutes; while VeliraPay cannot be asked, the lowest price alone decides. The block checkout leaves the method out as the total drops below that amount.
+- WooCommerce's **Hold stock** timer no longer cancels an order whose invoice a customer is paying, inside the 30-minute rate lock, with a payment confirming or with a short payment, which voided the invoice and turned the payment into a late one. The plugin reads the invoice before the timer cancels an order, and applies it when it was paid. While VeliraPay cannot be reached, only orders younger than the **Hold stock** minutes plus 90 are kept.
 
 ## 0.3.1 - 2026-11-06
 

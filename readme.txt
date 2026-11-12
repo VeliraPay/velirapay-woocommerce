@@ -54,7 +54,7 @@ Every coin your VeliraPay account takes, which needs a payout address for its ne
 
 = What happens to the order while the customer pays? =
 
-It stays "Pending payment" with the invoice's number and link in its notes. When a payment is seen on chain it goes "On hold", and when the payment confirms it goes "Processing" or "Completed", as any paid order would. If the customer never pays, it stays pending; WooCommerce's "Hold stock" setting cancels pending orders after the minutes you set, which also voids the invoice.
+It stays "Pending payment" with the invoice's number and link in its notes. When a payment is seen on chain it goes "On hold", and when the payment confirms it goes "Processing" or "Completed", as any paid order would. If the customer never pays, it stays pending; WooCommerce's "Hold stock" setting cancels pending orders after the minutes you set, which also voids the invoice. An order whose invoice is being paid, with a coin picked and its rate still locked, a payment confirming or a short payment, is not cancelled by that timer.
 
 = Does cancelling an order stop the payment? =
 

@@ -99,6 +99,8 @@ if (! class_exists('WC_Order')) {
 
         private string $transactionId = '';
 
+        private string $paymentMethod = 'velirapay';
+
         public array $notes = [];
 
         public function __construct(private int $id = 0) {}
@@ -270,7 +272,12 @@ if (! class_exists('WC_Order')) {
 
         public function get_payment_method(): string
         {
-            return 'velirapay';
+            return $this->paymentMethod;
+        }
+
+        public function set_payment_method(string $method): void
+        {
+            $this->paymentMethod = $method;
         }
 
         public function is_paid(): bool
