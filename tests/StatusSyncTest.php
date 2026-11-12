@@ -390,32 +390,120 @@ final class StatusSyncTest extends TestCase
         $this->assertSame('z8x6c4v2b0nm', $order->transactionId);
     }
 
-    public function test_a_paid_invoice_leaves_a_cancelled_order_cancelled_and_says_so_once(): void
+    public function test_a_paid_invoice_completes_a_cancelled_order_as_it_would_a_pending_one(): void
     {
-        $order = new FakeOrder('cancelled');
-        $invoice = self::invoice('paid', [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']]);
+        $webhook = new FakeOrder('cancelled');
+        $polled = new FakeOrder('cancelled');
 
-        (new StatusSync)->applyEvent($order, 'invoice.paid', ['invoice' => $invoice]);
-        (new StatusSync)->applyInvoice($order, $invoice);
+        (new StatusSync)->applyEvent($webhook, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']])]);
+        (new StatusSync)->applyInvoice($polled, self::invoice('paid', [['id' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']]));
 
-        $this->assertSame('cancelled', $order->status);
-        $this->assertNull($order->transactionId);
-        $this->assertSame(['VeliraPay invoice INV-0042 was paid (charge z8x6c4v2b0nm) after this order was cancelled, so it was left cancelled. Move it to Processing to fulfil it, or refund the payment from your wallet and record the refund in the VeliraPay dashboard.'], $order->notes);
+        foreach (['webhook' => $webhook, 'polled' => $polled] as $path => $order) {
+            $this->assertSame('processing', $order->status, "The {$path} order");
+            $this->assertSame('z8x6c4v2b0nm', $order->transactionId, "The {$path} order");
+            $this->assertSame(['VeliraPay invoice INV-0042 paid (charge z8x6c4v2b0nm).'], $order->notes, "The {$path} order");
+        }
     }
 
-    public function test_news_of_a_payment_never_moves_a_cancelled_order(): void
+    public function test_a_cancelled_order_completed_by_its_paid_invoice_is_completed_once(): void
+    {
+        $order = new FakeOrder('cancelled');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']])]);
+        $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']])]);
+        $sync->applyInvoice($order, self::invoice('paid', [['id' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']]));
+
+        $this->assertSame('processing', $order->status);
+        // The order's markPaid() notes every payment it is asked to complete.
+        $this->assertSame(['VeliraPay invoice INV-0042 paid (charge z8x6c4v2b0nm).'], $order->notes);
+    }
+
+    public function test_an_invoice_paid_by_accepting_a_late_payment_holds_a_cancelled_order(): void
+    {
+        $order = new FakeOrder('cancelled');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'charge.late_payment', ['charge' => self::charge('expired'), 'transaction' => ['amount' => '0.002500000000000000']]);
+
+        $this->assertSame('cancelled', $order->status);
+
+        $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']])]);
+        $sync->applyInvoice($order, self::invoice('paid', [['id' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']]));
+
+        $this->assertSame('on-hold', $order->status);
+        $this->assertNull($order->transactionId);
+        $this->assertCount(2, $order->notes);
+        $this->assertSame('VeliraPay invoice INV-0042 was paid by accepting the late payment on charge k3v9x2m7q8wz, so this order was not marked paid. Move it to Processing to fulfil it, or cancel it once the payment is refunded.', $order->notes[1]);
+    }
+
+    public function test_polling_an_invoice_paid_by_accepting_a_short_payment_holds_a_cancelled_order(): void
+    {
+        $order = new FakeOrder('cancelled');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'charge.payment_detected', ['charge' => self::charge('pending', ['transactions' => [self::transfer('t1', false)]]), 'transaction' => self::transfer('t1', false)]);
+        $sync->applyEvent($order, 'charge.underpaid', ['charge' => self::charge('underpaid', ['received_amount' => '0.002000000000000000', 'transactions' => [self::transfer('t1', true)]])]);
+        $sync->applyInvoice($order, self::invoice('paid', [['id' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']]));
+        $sync->applyInvoice($order, self::invoice('paid', [['id' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']]));
+
+        $this->assertSame('on-hold', $order->status);
+        $this->assertNull($order->transactionId);
+        $this->assertCount(3, $order->notes);
+        $this->assertStringContainsString('the short payment was most likely accepted and this order was not marked paid', $order->notes[2]);
+    }
+
+    public function test_a_paid_invoice_that_no_longer_covers_a_cancelled_order_holds_it_once(): void
+    {
+        $order = new FakeOrder('cancelled', total: '64.90');
+
+        (new StatusSync)->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']])]);
+        (new StatusSync)->applyInvoice($order, ['id' => 'w7c2h5j9d3kx', ...self::invoice('paid', [['id' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']])]);
+
+        $this->assertSame('on-hold', $order->status);
+        $this->assertNull($order->transactionId);
+        $this->assertSame(['VeliraPay invoice INV-0042 was paid (charge z8x6c4v2b0nm), but it was for 49.90 EUR and the order now comes to 64.90 EUR, so it was not marked paid. Check the payment before fulfilling the order.'], $order->notes);
+    }
+
+    public function test_a_cancelled_order_held_for_an_accepted_payment_stays_held_when_a_transfer_seen_before_it_was_cancelled_never_confirms(): void
+    {
+        $order = new FakeOrder('pending');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'charge.payment_detected', ['charge' => self::charge('pending', ['code' => 'm2q7w4e9r1ty', 'transactions' => [self::transfer('t1', false)]]), 'transaction' => self::transfer('t1', false)]);
+        $order->status = 'cancelled';
+        $sync->applyEvent($order, 'charge.late_payment', ['charge' => self::charge('expired'), 'transaction' => ['amount' => '0.002500000000000000']]);
+        $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']])]);
+        $sync->applyEvent($order, 'charge.expired', ['charge' => self::charge('expired', ['code' => 'm2q7w4e9r1ty', 'transactions' => []])]);
+
+        $this->assertSame('on-hold', $order->status);
+    }
+
+    public function test_news_short_of_a_paid_invoice_never_moves_a_cancelled_order(): void
     {
         $order = new FakeOrder('cancelled');
         $sync = new StatusSync;
 
         $sync->applyEvent($order, 'charge.payment_detected', ['charge' => self::charge('pending')]);
         $sync->applyEvent($order, 'charge.underpaid', ['charge' => self::charge('underpaid')]);
-        $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']])]);
         $sync->applyInvoice($order, self::invoice('open', [['id' => 'k3v9x2m7q8wz', 'status' => 'underpaid', 'asset' => 'BTC']]));
         $sync->applySupersededEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']])]);
 
         $this->assertSame('cancelled', $order->status);
         $this->assertNull($order->transactionId);
+    }
+
+    public function test_a_paid_invoice_leaves_a_trashed_order_alone(): void
+    {
+        $order = new FakeOrder('trash');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']])]);
+        $sync->applyInvoice($order, self::invoice('paid', [['id' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']]));
+
+        $this->assertSame('trash', $order->status);
+        $this->assertNull($order->transactionId);
+        $this->assertSame(['VeliraPay invoice INV-0042 was paid (charge z8x6c4v2b0nm) while this order was trash, so its status was left alone.'], $order->notes);
     }
 
     /**

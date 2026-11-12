@@ -10,9 +10,15 @@ namespace VeliraPay\WooCommerce\Orders;
 final class StatusSync
 {
     /**
-     * The statuses of an order still waiting for its payment, the only ones a payment moves.
+     * The statuses of an order still waiting for its payment, the only ones a payment moves until its invoice is paid.
      */
     private const UNPAID_STATUSES = ['pending', 'failed', 'on-hold'];
+
+    /**
+     * The statuses of an order its paid invoice moves, as WooCommerce's payment_complete() does: those still waiting for
+     * payment, and a cancelled one, which is brought back.
+     */
+    private const PAYABLE_STATUSES = [...self::UNPAID_STATUSES, 'cancelled'];
 
     /**
      * How many transfers to one charge are looked through when telling a topped-up short payment from an accepted one.
@@ -233,9 +239,10 @@ final class StatusSync
     }
 
     /**
-     * Record the payment with the charge that paid the invoice, once. An order the invoice no longer covers, or whose
-     * invoice was paid by accepting a short or late payment, is held instead, and one that no longer waits for payment,
-     * such as a cancelled one, is only noted.
+     * Record the payment with the charge that paid the invoice, once, moving an order still waiting for payment, or a
+     * cancelled one, as WooCommerce's payment_complete() does. An order the invoice no longer covers, or whose invoice was
+     * paid by accepting a short or late payment, is held instead, a cancelled one included, and any other order is only
+     * noted.
      *
      * @param  array<array-key, mixed>  $invoice
      */
@@ -256,14 +263,21 @@ final class StatusSync
                 return;
             }
 
-            $this->hold($order, sprintf(
+            $note = sprintf(
                 /* translators: 1: invoice number, 2: charge code, 3: invoice amount and currency, 4: order total and currency */
                 __('VeliraPay invoice %1$s was paid (charge %2$s), but it was for %3$s and the order now comes to %4$s, so it was not marked paid. Check the payment before fulfilling the order.', 'velirapay-woocommerce'),
                 $number,
                 $charge,
                 trim(self::money($invoice['amount'] ?? null).' '.self::text($invoice['currency'] ?? null)),
                 trim(self::money($order->total()).' '.$order->currency()),
-            ));
+            );
+
+            if ($order->status() === 'cancelled') {
+                $this->holdCancelled($order, $note);
+            } else {
+                $this->hold($order, $note);
+            }
+
             $order->rememberEvent($mismatch);
 
             return;
@@ -272,7 +286,7 @@ final class StatusSync
         if ($this->wasAccepted($order, $charge)) {
             // Noted once between the webhook and every later poll, as the mismatch is.
             if (! $order->hasHandledEvent('accepted:'.$charge)) {
-                $this->holdWhileUnpaid($order, $order->hasHandledEvent('late:'.$charge)
+                $note = $order->hasHandledEvent('late:'.$charge)
                     ? sprintf(
                         /* translators: 1: invoice number, 2: charge code */
                         __('VeliraPay invoice %1$s was paid by accepting the late payment on charge %2$s, so this order was not marked paid. Move it to Processing to fulfil it, or cancel it once the payment is refunded.', 'velirapay-woocommerce'),
@@ -284,31 +298,31 @@ final class StatusSync
                         __('VeliraPay invoice %1$s was paid, but charge %2$s was last reported short and no top-up was seen since, so the short payment was most likely accepted and this order was not marked paid. Check the charge in the VeliraPay dashboard, then move the order to Processing to fulfil it, or cancel it once the payment is refunded.', 'velirapay-woocommerce'),
                         $number,
                         $charge,
-                    ));
+                    );
+
+                if ($order->status() === 'cancelled') {
+                    $this->holdCancelled($order, $note);
+                } else {
+                    $this->holdWhileUnpaid($order, $note);
+                }
+
                 $order->rememberEvent('accepted:'.$charge);
             }
 
             return;
         }
 
-        if (! in_array($order->status(), self::UNPAID_STATUSES, true)) {
+        if (! in_array($order->status(), self::PAYABLE_STATUSES, true)) {
             $leftAlone = 'left-alone:'.self::text($invoice['code'] ?? $invoice['id'] ?? null);
 
             if (! $order->hasHandledEvent($leftAlone)) {
-                $order->addNote($order->status() === 'cancelled'
-                    ? sprintf(
-                        /* translators: 1: invoice number, 2: charge code */
-                        __('VeliraPay invoice %1$s was paid (charge %2$s) after this order was cancelled, so it was left cancelled. Move it to Processing to fulfil it, or refund the payment from your wallet and record the refund in the VeliraPay dashboard.', 'velirapay-woocommerce'),
-                        $number,
-                        $charge,
-                    )
-                    : sprintf(
-                        /* translators: 1: invoice number, 2: charge code, 3: order status */
-                        __('VeliraPay invoice %1$s was paid (charge %2$s) while this order was %3$s, so its status was left alone.', 'velirapay-woocommerce'),
-                        $number,
-                        $charge,
-                        $order->status(),
-                    ));
+                $order->addNote(sprintf(
+                    /* translators: 1: invoice number, 2: charge code, 3: order status */
+                    __('VeliraPay invoice %1$s was paid (charge %2$s) while this order was %3$s, so its status was left alone.', 'velirapay-woocommerce'),
+                    $number,
+                    $charge,
+                    $order->status(),
+                ));
                 $order->rememberEvent($leftAlone);
             }
 
@@ -430,8 +444,8 @@ final class StatusSync
     }
 
     /**
-     * Put the order on hold while a payment is confirming or short, keeping the note either way. A cancelled order is
-     * never brought back: it only gets the note.
+     * Put the order on hold while a payment is confirming or short, keeping the note either way. A cancelled order only
+     * gets the note.
      *
      * @param  string  $detectedCharge  The charge a transfer was seen for, when that is why the order is held.
      */
@@ -458,6 +472,20 @@ final class StatusSync
 
         if ($detectedCharge !== '') {
             $order->rememberEvent('detected:'.$detectedCharge);
+        }
+    }
+
+    /**
+     * Bring a cancelled order whose invoice was paid back on hold rather than mark it paid, as one still waiting for
+     * payment would be held. It is held for more than a transfer seen on chain, so it stays held should a transfer it
+     * was held for before it was cancelled never confirm.
+     */
+    private function holdCancelled(Order $order, string $note): void
+    {
+        $order->setStatus('on-hold', $note);
+
+        if (! $order->hasHandledEvent('held')) {
+            $order->rememberEvent('held');
         }
     }
 

@@ -32,16 +32,19 @@ final class WooCommerceOrderTest extends TestCase
         $this->assertSame($status, $order->get_status());
     }
 
-    public function test_a_paid_invoice_leaves_a_cancelled_order_without_a_payment_date_cancelled(): void
+    public function test_a_paid_invoice_completes_a_cancelled_order_without_a_payment_date_once(): void
     {
         $order = new WC_Order(1042);
         $order->set_status('cancelled');
         $GLOBALS['velirapay_test_orders'] = [1042 => $order];
+        $invoice = ['code' => 'w7c2h5j9d3kx', 'number' => 'INV-0042', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR', 'charges' => [['id' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']]];
 
-        (new StatusSync)->applyInvoice(new WooCommerceOrder($order), ['code' => 'w7c2h5j9d3kx', 'number' => 'INV-0042', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR', 'charges' => [['id' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']]]);
+        (new StatusSync)->applyInvoice(new WooCommerceOrder($order), $invoice);
+        (new StatusSync)->applyInvoice(new WooCommerceOrder($order), $invoice);
 
-        $this->assertSame('cancelled', $order->get_status());
-        $this->assertNull($order->get_date_paid());
+        $this->assertSame('processing', $order->get_status());
+        $this->assertNotNull($order->get_date_paid());
+        $this->assertSame('z8x6c4v2b0nm', $order->get_transaction_id());
         $this->assertCount(1, wc_get_order_notes(['order_id' => 1042]));
     }
 
