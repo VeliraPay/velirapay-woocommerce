@@ -2,9 +2,9 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## 0.4.0 - 2026-11-12
 
-- A late payment to an expired, canceled or underpaid charge puts an order still pending, failed or on hold on hold, instead of only noting it, so WooCommerce's **Hold stock** timer no longer cancels the order, and voids its invoice, while the money waits for you to accept it. A cancelled order still only gets the note.
+- A late payment to an expired, canceled or underpaid charge now holds an order still waiting for payment (pending, failed or on hold) instead of only noting it, so WooCommerce's **Hold stock** timer no longer cancels the order, and voids its invoice, while the money waits for you to accept it. A cancelled order still only gets the note.
 - An invoice paid by accepting a late payment, or a short one that no top-up followed, puts the order on hold instead of marking it paid, since VeliraPay has you accept such a payment before refunding it as well as to keep it. The order and its notes say what to do next. A short payment the customer topped up in time still completes the order, at its next poll when the top-up is reported after the invoice was paid. Telling the two apart needs the `charge.underpaid`, `charge.payment_detected` and `charge.late_payment` webhooks, and a short payment made with test mode's **Simulate payment**, whose top-ups are never announced, is not held.
 - A detected or short payment, or the payment of an invoice the order replaced, only adds a note to a cancelled order instead of putting it on hold. Its invoice being paid still brings it back, handled as a pending order would be, since WooCommerce's `payment_complete()` takes cancelled orders too: to **Processing** when the payment covered it in time, or **On hold** when the invoice was paid by accepting a short or late payment, or no longer covers the order. This happens when `invoice.paid` arrives or you choose **Check VeliraPay status**, since the hourly poll and the order-received page skip cancelled orders.
 - The notes on short and late payments say what accepting them in the VeliraPay dashboard does to the order, and on a cancelled order that was never paid, that accepting brings it back on hold, where WooCommerce takes its stock again.
@@ -28,6 +28,7 @@ All notable changes to this plugin are documented here. It follows [Semantic Ver
 - Exception messages, the API's among them, are escaped, the webhook's signature header and the order key on the order-received page are unslashed and sanitized, saved API keys and webhook secrets are sanitized, and every PHP file stops unless WordPress loads it, so the plugin passes WordPress's Plugin Check. The signature header VeliraPay sends, `t=<unix time>,v1=<hex>` with one `v1` or two, comes through sanitizing unchanged.
 - CI runs WordPress's Plugin Check, which WordPress.org reviews plugins with, on the plugin as the zip holds it, and fails on any error it reports.
 - A version tag also deploys the plugin to WordPress.org, the same files as the zip with the listing's banners and icons from `.wordpress-org`, once the `SVN_USERNAME` and `SVN_PASSWORD` secrets are set. Until then, as while WordPress.org reviews the plugin, the deploy is skipped and the tag only publishes the GitHub release.
+- Tested up to WooCommerce 11.3.
 
 ## 0.3.1 - 2026-11-06
 

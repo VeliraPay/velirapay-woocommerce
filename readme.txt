@@ -5,8 +5,8 @@ Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.3
-WC tested up to: 11.2
-Stable tag: 0.3.1
+WC tested up to: 11.3
+Stable tag: 0.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -104,6 +104,23 @@ By hand. Send the coins back from your wallet and record the refund in the Velir
 
 == Changelog ==
 
+= 0.4.0 =
+* A late payment puts an order still waiting for payment on hold, so the "Hold stock" timer no longer cancels it and voids its invoice meanwhile.
+* An invoice paid by accepting a late payment, or a short one no top-up followed, holds the order instead of marking it paid. A short payment topped up in time still completes it.
+* A detected or short payment only adds a note to a cancelled order. Its invoice being paid still brings it back, on hold when you accepted a short or late payment.
+* The "Hold stock" timer no longer cancels an order whose invoice is being paid.
+* The method is only offered for totals VeliraPay takes: the currency's lowest price, and a coin the account takes for that amount.
+* Replacing an outdated invoice can no longer cancel the order, even when the new invoice cannot be created.
+* An order held for a payment that never confirmed goes back to pending payment.
+* The checkout shows why VeliraPay refused the customer's email or the amount, and an order without an email uses the customer's account email.
+* Voiding a cancelled order's invoice is retried when VeliraPay cannot be reached, and a trashed or deleted unpaid order's invoice is voided too.
+* API requests never follow redirects, the webhook URL is always shown with https://, and a new API key is checked with VeliraPay when saved.
+* Order notes name the coin's network, and a Lightning payment is noted as final.
+* The plugin's folder and text domain are now velirapay-for-woocommerce, its slug on WordPress.org, where new versions come from once it is listed there.
+* Exception messages are escaped, and request input and saved keys are sanitized.
+* The privacy policy guide suggests text about VeliraPay.
+* Tested up to WooCommerce 11.3.
+
 = 0.3.1 =
 * Retrying an order after changing modes or accounts no longer replaces its existing invoice.
 * Delayed events leave refunded orders and orders with a recorded payment date alone.
@@ -121,3 +138,8 @@ By hand. Send the coins back from your wallet and record the refund in the Velir
 
 = 0.1.0 =
 * First release: the payment method, the webhook receiver, the status sync and the settings page.
+
+== Upgrade Notice ==
+
+= 0.4.0 =
+Orders paid by accepting a short or late payment now wait on hold for you. The plugin's folder is now velirapay-for-woocommerce: deactivate and delete a copy installed from an earlier zip before uploading this one. Its settings are kept.
