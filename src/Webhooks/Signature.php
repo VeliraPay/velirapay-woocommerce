@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace VeliraPay\WooCommerce\Webhooks;
 
+defined('ABSPATH') || exit;
+
 /**
  * Checks the signature VeliraPay puts on every webhook delivery.
  */

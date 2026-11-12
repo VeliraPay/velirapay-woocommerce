@@ -7,6 +7,8 @@ namespace VeliraPay\WooCommerce\Orders;
 use WC_Meta_Data;
 use WC_Order;
 
+defined('ABSPATH') || exit;
+
 /**
  * A WooCommerce order, with the invoice and the webhook events it saw kept in its meta.
  */

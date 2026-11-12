@@ -16,6 +16,8 @@ use WC_Order;
 use WC_Payment_Gateway;
 use WP_User;
 
+defined('ABSPATH') || exit;
+
 /**
  * The VeliraPay payment method: each order becomes an invoice the customer pays on VeliraPay's hosted page.
  */
@@ -516,7 +518,7 @@ final class Gateway extends WC_Payment_Gateway
 
         // Checked before an outdated invoice is voided, so the customer can add one and still pay it.
         if ($email === '') {
-            throw new InvalidArgumentException(__('an email address is needed to pay. Please enter your billing email address.', 'velirapay-for-woocommerce'));
+            throw new InvalidArgumentException(esc_html__('an email address is needed to pay. Please enter your billing email address.', 'velirapay-for-woocommerce'));
         }
 
         if ($existing !== null && $status === 'open' && ! $this->voidOutdated($client, $order, $code, $existing)) {
@@ -721,7 +723,7 @@ final class Gateway extends WC_Payment_Gateway
      */
     private function validatePrefixed(string $key, mixed $value, string $prefix, bool $list = false): string
     {
-        $value = is_string($value) ? trim(stripslashes($value)) : '';
+        $value = is_string($value) ? sanitize_text_field(wp_unslash($value)) : '';
         $items = $list ? Signature::parseSecrets($value) : [$value];
 
         foreach ($items as $item) {

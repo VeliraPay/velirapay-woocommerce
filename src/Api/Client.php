@@ -7,6 +7,8 @@ namespace VeliraPay\WooCommerce\Api;
 use Closure;
 use InvalidArgumentException;
 
+defined('ABSPATH') || exit;
+
 /**
  * Calls the VeliraPay API through an HTTP transport handed in, so it runs without WordPress in tests.
  */
@@ -156,13 +158,16 @@ final class Client
         $decoded = is_array($decoded) ? $decoded : [];
 
         if ($response['status'] < 200 || $response['status'] >= 300) {
-            throw ApiException::fromResponse($response['status'], $decoded);
+            // Built before the throw, whose arguments are checked for escaping: fromResponse() escapes the API's message itself.
+            $exception = ApiException::fromResponse($response['status'], $decoded);
+
+            throw $exception;
         }
 
         $data = $decoded['data'] ?? null;
 
         if (! is_array($data)) {
-            throw new ApiException('The VeliraPay API answered without the expected object.', $response['status']);
+            throw new ApiException('The VeliraPay API answered without the expected object.', (int) $response['status']);
         }
 
         /** @var array<string, mixed> $data */

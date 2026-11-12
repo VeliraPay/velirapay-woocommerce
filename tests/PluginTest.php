@@ -12,6 +12,7 @@ use VeliraPay\WooCommerce\Api\Client;
 use VeliraPay\WooCommerce\Gateway;
 use VeliraPay\WooCommerce\Orders\WooCommerceOrder;
 use VeliraPay\WooCommerce\Plugin;
+use VeliraPay\WooCommerce\Webhooks\Signature;
 use WC_Cart;
 use WC_Order;
 
@@ -289,6 +290,25 @@ final class PluginTest extends TestCase
         unset($GLOBALS['velirapay_test_privacy']);
     }
 
+    public function test_the_signature_header_is_unslashed_and_sanitized_unchanged_and_still_verifies(): void
+    {
+        $payload = '{"id":"whd_1","event_id":"evt_1","event":"invoice.paid","mode":"live","data":{"invoice":{"code":"invoice1042"}}}';
+        $timestamp = time();
+        // Signed with the old and the new secret, as VeliraPay does for a day after a secret is rotated.
+        $header = Signature::header($payload, 'whsec_old', $timestamp).',v1='.hash_hmac('sha256', $timestamp.'.'.$payload, 'whsec_new');
+        // WordPress adds slashes to $_SERVER, as to $_GET and $_POST.
+        $_SERVER['HTTP_X_VELIRAPAY_SIGNATURE'] = addslashes($header);
+
+        $this->assertMatchesRegularExpression('/^t=\d+,v1=[0-9a-f]{64},v1=[0-9a-f]{64}$/', $header);
+        $this->assertSame($header, Plugin::signatureHeader());
+        $this->assertTrue(Signature::verify($payload, Plugin::signatureHeader(), ['whsec_new']));
+        $this->assertTrue(Signature::verify($payload, Plugin::signatureHeader(), ['whsec_old']));
+
+        unset($_SERVER['HTTP_X_VELIRAPAY_SIGNATURE']);
+
+        $this->assertNull(Plugin::signatureHeader());
+    }
+
     public function test_api_requests_never_follow_a_redirect_with_the_key(): void
     {
         $sent = [];
@@ -527,6 +547,7 @@ final class PluginTest extends TestCase
             $GLOBALS['velirapay_test_events'],
             $GLOBALS['velirapay_test_transients'],
             $GLOBALS['velirapay_test_logs'],
+            $_SERVER['HTTP_X_VELIRAPAY_SIGNATURE'],
         );
 
         parent::tearDown();

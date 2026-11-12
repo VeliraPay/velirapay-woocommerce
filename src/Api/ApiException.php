@@ -6,6 +6,8 @@ namespace VeliraPay\WooCommerce\Api;
 
 use RuntimeException;
 
+defined('ABSPATH') || exit;
+
 /**
  * Thrown when the VeliraPay API answers with an error, or cannot be reached.
  */
@@ -23,7 +25,7 @@ final class ApiException extends RuntimeException
     }
 
     /**
-     * Create the exception for an error response.
+     * Create the exception for an error response, with the API's message escaped for HTML.
      *
      * @param  array<array-key, mixed>  $body  The decoded response body.
      */
@@ -37,7 +39,7 @@ final class ApiException extends RuntimeException
         }
 
         return new self(
-            is_string($message) && $message !== '' ? $message : "The VeliraPay API answered with HTTP {$status}.",
+            is_string($message) && $message !== '' ? esc_html($message) : "The VeliraPay API answered with HTTP {$status}.",
             $status,
             $errors,
         );

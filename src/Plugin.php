@@ -17,6 +17,8 @@ use VeliraPay\WooCommerce\Orders\WooCommerceOrders;
 use VeliraPay\WooCommerce\Webhooks\Handler;
 use WC_Order;
 
+defined('ABSPATH') || exit;
+
 /**
  * Wires the gateway, the webhook receiver and the status sync into WordPress and WooCommerce.
  */
@@ -216,11 +218,9 @@ final class Plugin
     {
         $gateway = self::gateway();
         $payload = (string) file_get_contents('php://input');
-        $signature = $_SERVER['HTTP_X_VELIRAPAY_SIGNATURE'] ?? null;
-        $header = is_string($signature) ? sanitize_text_field(wp_unslash($signature)) : null;
 
         $handler = new Handler(new WooCommerceOrders, new StatusSync, $gateway->mode(), $gateway->webhookSecrets());
-        $response = $handler->handle($payload, $header);
+        $response = $handler->handle($payload, self::signatureHeader());
 
         if ($response['status'] >= 400) {
             wc_get_logger()->warning(sprintf('Webhook answered with HTTP %d: %s', $response['status'], $response['body']), ['source' => self::LOG_SOURCE]);
@@ -230,6 +230,17 @@ final class Plugin
         header('Content-Type: text/plain; charset=utf-8');
         echo esc_html($response['body']);
         exit;
+    }
+
+    /**
+     * Get the X-VeliraPay-Signature header the delivery came with, unslashed and sanitized, which leaves the
+     * "t=<unix time>,v1=<hex>" VeliraPay sends as it is, or null without one.
+     */
+    public static function signatureHeader(): ?string
+    {
+        return isset($_SERVER['HTTP_X_VELIRAPAY_SIGNATURE']) && is_string($_SERVER['HTTP_X_VELIRAPAY_SIGNATURE'])
+            ? sanitize_text_field(wp_unslash($_SERVER['HTTP_X_VELIRAPAY_SIGNATURE']))
+            : null;
     }
 
     /**
@@ -400,8 +411,8 @@ final class Plugin
 
         $orderId = get_query_var('order-received', 0);
         $order = is_numeric($orderId) && (int) $orderId > 0 ? wc_get_order((int) $orderId) : null;
-        $key = $_GET['key'] ?? null;
-        $key = is_string($key) ? sanitize_text_field(wp_unslash($key)) : '';
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- WooCommerce's order key in the link, not a nonce, shows the order is the visitor's.
+        $key = isset($_GET['key']) && is_string($_GET['key']) ? sanitize_text_field(wp_unslash($_GET['key'])) : '';
 
         if (! $order instanceof WC_Order || $order->get_payment_method() !== Gateway::ID || ! hash_equals($order->get_order_key(), $key)) {
             return;
@@ -600,7 +611,7 @@ final class Plugin
             $response = wp_remote_request($url, $args);
 
             if (is_wp_error($response)) {
-                throw new ApiException('Could not reach the VeliraPay API: '.$response->get_error_message(), 0);
+                throw new ApiException('Could not reach the VeliraPay API: '.esc_html($response->get_error_message()), 0);
             }
 
             $status = (int) wp_remote_retrieve_response_code($response);
@@ -639,7 +650,7 @@ final class Plugin
             return;
         }
 
-        $kind = preg_match('~/v1/invoices(?:/|$)~', (string) parse_url($url, PHP_URL_PATH)) === 1 ? strtolower($method) : 'key';
+        $kind = preg_match('~/v1/invoices(?:/|$)~', (string) wp_parse_url($url, PHP_URL_PATH)) === 1 ? strtolower($method) : 'key';
         $transient = self::REFUSAL_TRANSIENT.$mode.'_'.$kind;
 
         if ($status === 401 || $status === 403) {

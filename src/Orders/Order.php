@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace VeliraPay\WooCommerce\Orders;
 
+defined('ABSPATH') || exit;
+
 /**
  * What the status mapping needs from a WooCommerce order, so it can be tested without WordPress.
  */

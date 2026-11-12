@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace VeliraPay\WooCommerce\Orders;
 
+defined('ABSPATH') || exit;
+
 /**
  * Turns what VeliraPay says about an invoice into WooCommerce order transitions, for webhooks and for polling alike.
  */

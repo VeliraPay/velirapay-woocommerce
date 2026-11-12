@@ -8,6 +8,8 @@ use Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodTyp
 use VeliraPay\WooCommerce\Gateway;
 use VeliraPay\WooCommerce\Plugin;
 
+defined('ABSPATH') || exit;
+
 /**
  * Shows the gateway on the block checkout.
  */

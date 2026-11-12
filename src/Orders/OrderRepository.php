@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace VeliraPay\WooCommerce\Orders;
 
+defined('ABSPATH') || exit;
+
 /**
  * Finds the order a VeliraPay invoice was created for.
  */

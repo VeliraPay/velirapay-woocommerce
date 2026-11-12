@@ -7,6 +7,8 @@ namespace VeliraPay\WooCommerce\Webhooks;
 use VeliraPay\WooCommerce\Orders\OrderRepository;
 use VeliraPay\WooCommerce\Orders\StatusSync;
 
+defined('ABSPATH') || exit;
+
 /**
  * Turns a webhook delivery into an order update and the HTTP answer VeliraPay should get.
  */

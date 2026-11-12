@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+// Every file of the plugin stops unless WordPress, which defines it, loaded it.
+define('ABSPATH', dirname(__DIR__).'/');
+
 require __DIR__.'/../vendor/autoload.php';
 
 // The pure classes translate their order notes with WordPress's __(), which is all they need from it.
@@ -358,9 +361,40 @@ function wp_specialchars_decode(string $text, int $quoteStyle): string
     return html_entity_decode($text, $quoteStyle);
 }
 
+// As WordPress does, an entity already in the text is left as it is, so text escaped twice reads the same.
 function esc_html(string $text): string
 {
-    return htmlspecialchars($text, ENT_QUOTES);
+    return htmlspecialchars($text, ENT_QUOTES, 'UTF-8', false);
+}
+
+function wp_unslash(string|array $value): string|array
+{
+    return is_array($value) ? array_map('wp_unslash', $value) : stripslashes($value);
+}
+
+// As WordPress's _sanitize_text_fields() does: no tags, no line breaks or runs of whitespace, nothing around the text, and
+// no percent-encoded octets.
+function sanitize_text_field(mixed $text): string
+{
+    if (is_array($text) || is_object($text)) {
+        return '';
+    }
+
+    $filtered = (string) $text;
+
+    if (str_contains($filtered, '<')) {
+        $filtered = strip_tags($filtered);
+    }
+
+    $filtered = trim((string) preg_replace('/[\r\n\t ]+/', ' ', $filtered));
+    $found = false;
+
+    while (preg_match('/%[a-f0-9]{2}/i', $filtered, $match) === 1) {
+        $filtered = str_replace($match[0], '', $filtered);
+        $found = true;
+    }
+
+    return $found ? trim((string) preg_replace('/ +/', ' ', $filtered)) : $filtered;
 }
 
 function esc_attr(string $text): string
