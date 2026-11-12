@@ -244,6 +244,27 @@ final class GatewayTest extends TestCase
         $this->assertStringContainsString('"customer_email":"ada@example.com"', $bodies[0]);
     }
 
+    public function test_the_webhook_url_is_always_https(): void
+    {
+        $GLOBALS['velirapay_test_home'] = 'http://store.example';
+
+        $this->assertSame('https://store.example/wc-api/velirapay/', $this->gateway()->webhookUrl());
+    }
+
+    public function test_the_settings_warn_a_site_not_served_over_https(): void
+    {
+        $gateway = $this->gateway();
+
+        $GLOBALS['velirapay_test_home'] = 'http://store.example';
+        $insecure = $gateway->generate_velirapay_webhook_url_html('webhook_url', ['title' => 'Webhook URL']);
+        $GLOBALS['velirapay_test_home'] = 'https://store.example';
+        $secure = $gateway->generate_velirapay_webhook_url_html('webhook_url', ['title' => 'Webhook URL']);
+
+        $this->assertStringContainsString('value="https://store.example/wc-api/velirapay/"', $insecure);
+        $this->assertStringContainsString('VeliraPay only sends webhooks to https:// addresses on port 443', $insecure);
+        $this->assertStringNotContainsString('VeliraPay only sends webhooks to https:// addresses on port 443', $secure);
+    }
+
     public function test_the_method_is_not_offered_below_the_lowest_price_of_the_currency(): void
     {
         $this->answerAssets([['id' => 'BTC', 'accepted' => true, 'minimum_price' => '0.50']]);
@@ -458,6 +479,7 @@ final class GatewayTest extends TestCase
             $GLOBALS['velirapay_test_events'],
             $GLOBALS['velirapay_test_logs'],
             $GLOBALS['velirapay_test_users'],
+            $GLOBALS['velirapay_test_home'],
         );
 
         parent::tearDown();

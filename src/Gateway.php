@@ -163,6 +163,11 @@ final class Gateway extends WC_Payment_Gateway
         $html = '<tr valign="top"><th scope="row" class="titledesc"><label for="'.esc_attr($this->get_field_key($key)).'">'.esc_html($title).'</label></th>';
         $html .= '<td class="forminp"><fieldset><legend class="screen-reader-text"><span>'.esc_html($title).'</span></legend>';
         $html .= '<input class="input-text regular-input" type="text" readonly id="'.esc_attr($this->get_field_key($key)).'" value="'.esc_attr($this->webhookUrl()).'" onfocus="this.select()" />';
+
+        if (wp_parse_url(home_url(), PHP_URL_SCHEME) !== 'https') {
+            $html .= '<p class="description" style="color:#b32d2e">'.esc_html__('This site\'s address starts with http://. VeliraPay only sends webhooks to https:// addresses on port 443, so the site has to answer on HTTPS at the URL above, without redirecting.', 'velirapay-woocommerce').'</p>';
+        }
+
         $html .= '<ol class="description" style="margin-top:8px">';
 
         foreach ($steps as $step) {
@@ -352,11 +357,11 @@ final class Gateway extends WC_Payment_Gateway
     }
 
     /**
-     * Get the URL VeliraPay posts webhooks to.
+     * Get the URL VeliraPay posts webhooks to, always on https, which VeliraPay requires whatever the site's address says.
      */
     public function webhookUrl(): string
     {
-        return WC()->api_request_url(self::ID);
+        return WC()->api_request_url(self::ID, true);
     }
 
     /**

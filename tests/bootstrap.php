@@ -34,6 +34,11 @@ if (! class_exists('WC_Payment_Gateway')) {
         {
             return $this->enabled === 'yes';
         }
+
+        public function get_field_key(string $key): string
+        {
+            return 'woocommerce_velirapay_'.$key;
+        }
     }
 }
 
@@ -344,6 +349,26 @@ function wp_specialchars_decode(string $text, int $quoteStyle): string
 function esc_html(string $text): string
 {
     return htmlspecialchars($text, ENT_QUOTES);
+}
+
+function esc_attr(string $text): string
+{
+    return htmlspecialchars($text, ENT_QUOTES);
+}
+
+function esc_html__(string $text, string $domain = 'default'): string
+{
+    return htmlspecialchars($text, ENT_QUOTES);
+}
+
+function home_url(string $path = ''): string
+{
+    return ($GLOBALS['velirapay_test_home'] ?? 'https://store.example').$path;
+}
+
+function wp_parse_url(string $url, int $component = -1): mixed
+{
+    return parse_url($url, $component);
 }
 
 function wc_get_logger(): object
