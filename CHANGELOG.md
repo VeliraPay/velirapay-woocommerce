@@ -2,7 +2,7 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## 0.4.2 - 2026-11-14
 
 - The note on a late payment to a charge VeliraPay quoted again in the coin the customer sent says so first, such as "The customer sent USDT (Tron) instead of TRX, so VeliraPay quoted charge k3v9x2m7q8wz again in USDT (Tron): 60.52 USDT (Tron) due instead of 166.333334 TRX.", before what accepting the payment does. TRX and USDT on Tron share deposit addresses, and VeliraPay switches a charge that closed with none of its own coin while the other arrived, keeping the first quote in the charge's `switched_from`. The order is held, and handled once you accept the payment, as for any other late payment. Needs VeliraPay's `switched_from`, which an older API does not send.
 
