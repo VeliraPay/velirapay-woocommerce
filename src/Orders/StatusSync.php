@@ -137,7 +137,7 @@ final class StatusSync
                     $asset,
                     $code,
                 ))
-                : $this->holdWhileUnpaid($order, self::comesBack($order)
+                : $this->holdWhileUnpaid($order, self::switchedCoin($charge).(self::comesBack($order)
                     ? sprintf(
                         /* translators: 1: amount, 2: coin, 3: charge code */
                         __('A late payment of %1$s %2$s arrived on charge %3$s. It has to be accepted in the VeliraPay dashboard, whether you keep it or refund it from your wallet, and accepting it brings this cancelled order back on hold, where WooCommerce takes its stock again: move it to Processing to fulfil it, or cancel it again once the payment is refunded.', 'velirapay-for-woocommerce'),
@@ -151,7 +151,7 @@ final class StatusSync
                         $seen,
                         $asset,
                         $code,
-                    )),
+                    ))),
             'charge.refunded' => $order->addNote(sprintf(
                 /* translators: 1: charge code, 2: amount, 3: coin */
                 __('A refund was recorded on charge %1$s: %2$s %3$s refunded in total.', 'velirapay-for-woocommerce'),
@@ -535,6 +535,32 @@ final class StatusSync
             __('The payment seen on chain for charge %s never confirmed, and the charge has closed, so the order is waiting for payment again: the customer can pay on the invoice page.', 'velirapay-for-woocommerce'),
             $code,
         ));
+    }
+
+    /**
+     * Get the sentence saying VeliraPay quoted the charge again in the coin the customer sent to its address, which TRX
+     * and USDT on Tron share, followed by a space, or an empty string for a charge that was never switched.
+     *
+     * @param  array<array-key, mixed>  $charge
+     */
+    private static function switchedCoin(array $charge): string
+    {
+        $first = is_array($charge['switched_from'] ?? null) ? $charge['switched_from'] : [];
+        $firstCoin = self::coin($first['asset'] ?? null);
+
+        if ($firstCoin === '') {
+            return '';
+        }
+
+        return sprintf(
+            /* translators: 1: coin the customer sent, 2: coin the charge was first quoted in, 3: charge code, 4: amount now due, 5: amount first quoted */
+            __('The customer sent %1$s instead of %2$s, so VeliraPay quoted charge %3$s again in %1$s: %4$s %1$s due instead of %5$s %2$s.', 'velirapay-for-woocommerce'),
+            self::coin($charge['asset'] ?? null),
+            $firstCoin,
+            self::text($charge['code'] ?? null),
+            self::amount($charge['asset_amount'] ?? null),
+            self::amount($first['asset_amount'] ?? null),
+        ).' ';
     }
 
     /**

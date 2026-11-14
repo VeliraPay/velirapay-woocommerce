@@ -291,6 +291,40 @@ final class StatusSyncTest extends TestCase
         $this->assertStringContainsString('Accepting it does not mark this order paid', $paid->notes[0]);
     }
 
+    public function test_a_late_payment_in_the_coin_a_charge_was_quoted_again_in_says_so_and_holds_the_order_until_accepting_it_pays_the_invoice(): void
+    {
+        $order = new FakeOrder('pending');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'charge.created', ['charge' => self::charge('pending', ['asset' => 'TRX', 'asset_amount' => '166.333334000000000000'])]);
+        $sync->applyEvent($order, 'charge.expired', ['charge' => self::charge('expired', ['asset' => 'TRX', 'asset_amount' => '166.333334000000000000', 'transactions' => []])]);
+        // The customer sent USDT on Tron to the address, which TRX shares, so VeliraPay quoted the closed charge again in it.
+        $sync->applyEvent($order, 'charge.late_payment', ['charge' => self::switchedCharge('expired'), 'transaction' => ['txid' => 'u1', 'amount' => '60.520000000000000000', 'confirmations' => 19]]);
+
+        $this->assertSame('on-hold', $order->status);
+        $this->assertSame('The customer sent USDT (Tron) instead of TRX, so VeliraPay quoted charge k3v9x2m7q8wz again in USDT (Tron): 60.52 USDT (Tron) due instead of 166.333334 TRX. A late payment of 60.52 USDT (Tron) arrived on charge k3v9x2m7q8wz. It has to be accepted in the VeliraPay dashboard, whether you keep it or refund it from your wallet. Accepting it does not mark this order paid: move the order to Processing to fulfil it, or cancel it once the payment is refunded.', $order->notes[2]);
+
+        $sync->applyEvent($order, 'charge.paid', ['charge' => self::switchedCharge('paid', ['received_amount' => '60.520000000000000000'])]);
+        $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'USDT_TRON']])]);
+
+        $this->assertSame('on-hold', $order->status);
+        $this->assertNull($order->transactionId);
+        $this->assertSame([
+            'Charge k3v9x2m7q8wz was paid: 60.52 USDT (Tron) received.',
+            'VeliraPay invoice INV-0042 was paid by accepting the late payment on charge k3v9x2m7q8wz, so this order was not marked paid. Move it to Processing to fulfil it, or cancel it once the payment is refunded.',
+        ], array_slice($order->notes, 3));
+    }
+
+    public function test_a_late_payment_in_the_coin_a_charge_was_quoted_again_in_says_so_on_a_cancelled_order_before_what_accepting_it_does(): void
+    {
+        $order = new FakeOrder('cancelled');
+
+        (new StatusSync)->applyEvent($order, 'charge.late_payment', ['charge' => self::switchedCharge('canceled'), 'transaction' => ['txid' => 'u1', 'amount' => '60.520000000000000000', 'confirmations' => 19]]);
+
+        $this->assertSame('cancelled', $order->status);
+        $this->assertSame(['The customer sent USDT (Tron) instead of TRX, so VeliraPay quoted charge k3v9x2m7q8wz again in USDT (Tron): 60.52 USDT (Tron) due instead of 166.333334 TRX. A late payment of 60.52 USDT (Tron) arrived on charge k3v9x2m7q8wz. It has to be accepted in the VeliraPay dashboard, whether you keep it or refund it from your wallet, and accepting it brings this cancelled order back on hold, where WooCommerce takes its stock again: move it to Processing to fulfil it, or cancel it again once the payment is refunded.'], $order->notes);
+    }
+
     public function test_an_underpaid_charge_only_adds_a_note_to_a_cancelled_order_saying_what_paying_or_accepting_it_does(): void
     {
         $order = new FakeOrder('cancelled');
@@ -640,7 +674,26 @@ final class StatusSyncTest extends TestCase
             'asset_amount' => '0.002500000000000000',
             'received_amount' => null,
             'refunded_amount' => '0',
+            'switched_from' => null,
             'invoice' => ['code' => 'w7c2h5j9d3kx', 'number' => 'INV-0042'],
         ], $attributes);
+    }
+
+    /**
+     * Build a charge first quoted in TRX that VeliraPay quoted again in USDT on Tron, the coin the customer sent, as a
+     * webhook carries it.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    private static function switchedCharge(string $status, array $attributes = []): array
+    {
+        return self::charge($status, array_replace([
+            'asset' => 'USDT_TRON',
+            'asset_amount' => '60.520000000000000000',
+            'exchange_rate' => '0.860000000000000000',
+            'network_surcharge' => '2.500000000000000000',
+            'switched_from' => ['asset' => 'TRX', 'asset_amount' => '166.333334000000000000', 'exchange_rate' => '0.300000000000000000', 'switched_at' => '2026-11-14T12:05:49.000000Z'],
+        ], $attributes));
     }
 }
