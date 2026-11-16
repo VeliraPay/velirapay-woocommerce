@@ -155,19 +155,6 @@ final class StatusSyncTest extends TestCase
         ], $order->notes);
     }
 
-    public function test_a_lightning_payment_is_noted_as_final_rather_than_waiting_for_confirmations(): void
-    {
-        $order = new FakeOrder('pending');
-
-        (new StatusSync)->applyEvent($order, 'charge.payment_detected', [
-            'charge' => self::charge('pending', ['asset' => 'BTC_LIGHTNING', 'asset_amount' => '0.00012000']),
-            'transaction' => ['txid' => 'a1b2', 'amount' => '0.00012000', 'confirmations' => 1],
-        ]);
-
-        $this->assertSame('on-hold', $order->status);
-        $this->assertSame(['Lightning payment of 0.00012 BTC received. A paid Lightning invoice is final, so VeliraPay counts it in a moment (charge k3v9x2m7q8wz).'], $order->notes);
-    }
-
     public function test_a_detected_payment_only_adds_a_note_once_on_hold_or_paid(): void
     {
         $held = new FakeOrder('on-hold');

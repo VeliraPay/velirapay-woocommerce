@@ -2,6 +2,10 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+- A detected payment is noted the same way in every coin: the Lightning-specific order note and the "BTC (Lightning)" label are gone, since VeliraPay no longer offers Bitcoin over Lightning.
+
 ## 0.4.3 - 2026-11-16
 
 - The plugin's admin notices (a store currency VeliraPay does not bill in, a missing API key, an account that takes no coin, a key VeliraPay refused, and WooCommerce missing) show only on the Plugins screen and WooCommerce's settings and order lists, instead of on every admin page, as WordPress.org's guidelines ask.

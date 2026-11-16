@@ -32,7 +32,6 @@ final class StatusSync
      * as VeliraPay's own lists do. Any other coin, including one added later, is named by its code.
      */
     private const COIN_NAMES = [
-        'BTC_LIGHTNING' => 'BTC (Lightning)',
         'USDT' => 'USDT (Ethereum)',
         'USDC' => 'USDC (Ethereum)',
         'USDT_TRON' => 'USDT (Tron)',
@@ -81,20 +80,13 @@ final class StatusSync
                 $due,
                 $code,
             )),
-            'charge.payment_detected' => $this->hold($order, ($charge['asset'] ?? null) === 'BTC_LIGHTNING'
-                ? sprintf(
-                    /* translators: 1: amount in bitcoin, 2: charge code */
-                    __('Lightning payment of %1$s BTC received. A paid Lightning invoice is final, so VeliraPay counts it in a moment (charge %2$s).', 'velirapay-for-woocommerce'),
-                    $seen,
-                    $code,
-                )
-                : sprintf(
-                    /* translators: 1: amount, 2: coin, 3: charge code */
-                    __('Payment of %1$s %2$s seen on chain, waiting for confirmations (charge %3$s).', 'velirapay-for-woocommerce'),
-                    $seen,
-                    $asset,
-                    $code,
-                ), detectedCharge: $code),
+            'charge.payment_detected' => $this->hold($order, sprintf(
+                /* translators: 1: amount, 2: coin, 3: charge code */
+                __('Payment of %1$s %2$s seen on chain, waiting for confirmations (charge %3$s).', 'velirapay-for-woocommerce'),
+                $seen,
+                $asset,
+                $code,
+            ), detectedCharge: $code),
             'charge.underpaid' => $this->hold($order, self::comesBack($order)
                 ? sprintf(
                     /* translators: 1: amount received, 2: amount due, 3: coin, 4: charge code */
