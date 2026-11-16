@@ -388,6 +388,22 @@ final class PluginTest extends TestCase
         $this->assertStringNotContainsString('refused', $this->notices());
     }
 
+    public function test_notices_only_show_on_the_plugins_screen_and_woocommerce_settings_and_orders(): void
+    {
+        $this->pendingOrder();
+        $GLOBALS['velirapay_test_currency'] = 'JPY';
+
+        foreach (['plugins', 'woocommerce_page_wc-settings', 'woocommerce_page_wc-orders', 'edit-shop_order'] as $screen) {
+            $GLOBALS['velirapay_test_screen'] = $screen;
+            $this->assertStringContainsString('VeliraPay cannot take payments in JPY', $this->notices(), $screen);
+        }
+
+        foreach (['dashboard', 'edit-post', 'woocommerce_page_wc-admin'] as $screen) {
+            $GLOBALS['velirapay_test_screen'] = $screen;
+            $this->assertSame('', $this->notices(), $screen);
+        }
+    }
+
     public function test_an_account_that_takes_no_coin_is_explained_when_checkout_found_so(): void
     {
         $this->pendingOrder();
@@ -547,6 +563,8 @@ final class PluginTest extends TestCase
             $GLOBALS['velirapay_test_events'],
             $GLOBALS['velirapay_test_transients'],
             $GLOBALS['velirapay_test_logs'],
+            $GLOBALS['velirapay_test_currency'],
+            $GLOBALS['velirapay_test_screen'],
             $_SERVER['HTTP_X_VELIRAPAY_SIGNATURE'],
         );
 

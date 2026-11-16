@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.3
 WC tested up to: 11.3
-Stable tag: 0.4.2
+Stable tag: 0.4.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -45,7 +45,7 @@ The plugin calls no other service.
 
 1. Under Plugins → Add New Plugin, search for "VeliraPay for WooCommerce", install it and activate it. WooCommerce 8.3 or later must be active.
 2. In the VeliraPay dashboard, under Developers → API keys, create an API key. The plugin only creates, reads and voids invoices, so a restricted key with Read invoices and Create invoices is all it needs. A key the store already uses can be restricted the same way with the pencil next to it on that page, with no need to paste it again.
-3. Go to WooCommerce → Settings → Payments → VeliraPay and paste the key into the live or test field. A new key is checked with VeliraPay when you save, and a key VeliraPay refuses later, at checkout or while polling, is reported in an admin notice.
+3. Go to WooCommerce → Settings → Payments → VeliraPay and paste the key into the live or test field. A new key is checked with VeliraPay when you save, and a key VeliraPay refuses later, at checkout or while polling, is reported in a notice on the Plugins screen and WooCommerce's settings and order lists.
 4. Under Developers → Webhooks in the dashboard, add an endpoint with the webhook URL shown on the settings page (VeliraPay only delivers to an https:// address on port 443 that answers within 15 seconds without redirecting) and tick the invoice.paid, invoice.voided, charge.payment_detected, charge.underpaid, charge.expired, charge.late_payment and charge.refunded events. Copy its signing secret into the settings page.
 5. Enable the gateway and save.
 6. Back on the endpoint's page in the dashboard, press Verify. The plugin answers the challenge VeliraPay sends, and the endpoint receives nothing until it has.
@@ -103,6 +103,9 @@ From WordPress.org, once the plugin is listed there: WordPress then offers each 
 By hand. Send the coins back from your wallet and record the refund in the VeliraPay dashboard; the plugin adds a note to the order.
 
 == Changelog ==
+
+= 0.4.3 =
+* The plugin's admin notices show only on the Plugins screen and WooCommerce's settings and order lists, instead of on every admin page.
 
 = 0.4.2 =
 * The note on a late payment says first when VeliraPay quoted its charge again in the coin the customer sent, USDT on Tron instead of TRX or the other way round, and what is now due.

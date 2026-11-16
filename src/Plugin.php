@@ -27,7 +27,7 @@ final class Plugin
     /**
      * The plugin's version, as in its header.
      */
-    public const VERSION = '0.4.2';
+    public const VERSION = '0.4.3';
 
     /**
      * The WP-Cron hook that polls pending orders.
@@ -90,6 +90,11 @@ final class Plugin
      * need no permission, the coins on offer and the account.
      */
     private const REFUSAL_KINDS = ['get', 'post', 'key'];
+
+    /**
+     * The admin screens the plugin's notices show on: Plugins, WooCommerce's settings and its order lists.
+     */
+    private const NOTICE_SCREENS = ['plugins', 'woocommerce_page_wc-settings', 'woocommerce_page_wc-orders', 'edit-shop_order'];
 
     /**
      * The main plugin file.
@@ -492,7 +497,7 @@ final class Plugin
      */
     public static function configurationNotices(): void
     {
-        if (! current_user_can('manage_woocommerce')) {
+        if (! current_user_can('manage_woocommerce') || ! self::isNoticeScreen()) {
             return;
         }
 
@@ -550,7 +555,7 @@ final class Plugin
      */
     public static function missingWooCommerceNotice(): void
     {
-        if (current_user_can('activate_plugins')) {
+        if (current_user_can('activate_plugins') && self::isNoticeScreen()) {
             self::notice(__('VeliraPay for WooCommerce needs WooCommerce 8.3 or later to be installed and active.', 'velirapay-for-woocommerce'));
         }
     }
@@ -826,6 +831,16 @@ final class Plugin
         }
 
         return false;
+    }
+
+    /**
+     * Determine if the current admin screen is one the plugin's notices belong on.
+     */
+    private static function isNoticeScreen(): bool
+    {
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+
+        return $screen !== null && in_array($screen->id, self::NOTICE_SCREENS, true);
     }
 
     /**

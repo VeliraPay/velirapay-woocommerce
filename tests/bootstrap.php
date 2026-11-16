@@ -649,3 +649,15 @@ function get_post_type(int $postId): string|false
 {
     return isset($GLOBALS['velirapay_test_orders'][$postId]) ? 'shop_order' : false;
 }
+
+if (! class_exists('WP_Screen')) {
+    class WP_Screen
+    {
+        public function __construct(public string $id = '') {}
+    }
+}
+
+function get_current_screen(): ?WP_Screen
+{
+    return new WP_Screen($GLOBALS['velirapay_test_screen'] ?? 'woocommerce_page_wc-settings');
+}
