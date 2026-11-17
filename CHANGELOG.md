@@ -2,7 +2,7 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## 0.4.4 - 2026-11-17
 
 - A detected payment is noted the same way in every coin: the Lightning-specific order note and the "BTC (Lightning)" label are gone, since VeliraPay no longer offers Bitcoin over Lightning.
 
