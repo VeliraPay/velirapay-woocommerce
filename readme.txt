@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.3
 WC tested up to: 11.3
-Stable tag: 0.4.5
+Stable tag: 0.4.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -96,13 +96,16 @@ The invoice itself is not emailed: the customer is sent straight to its page. In
 
 = How is the plugin updated? =
 
-From WordPress.org, once the plugin is listed there: WordPress then offers each new version on its Plugins and Updates screens like any other plugin's. Until then, a new version is installed by uploading its zip from https://github.com/VeliraPay/velirapay-woocommerce/releases under Plugins → Add New Plugin → Upload Plugin.
+From WordPress.org: WordPress offers each new version on its Plugins and Updates screens, like any other plugin's.
 
 = How are refunds handled? =
 
 By hand. Send the coins back from your wallet and record the refund in the VeliraPay dashboard; the plugin adds a note to the order.
 
 == Changelog ==
+
+= 0.4.6 =
+* Requests to VeliraPay are encoded with wp_json_encode(), and the webhook URL field on the settings page no longer carries an inline script.
 
 = 0.4.5 =
 * What VeliraPay sends, webhook deliveries and API answers alike, is sanitized as soon as it is decoded, before it reaches an order note, the order's meta or a redirect. A webhook's raw body is still checked against its signature as it came.

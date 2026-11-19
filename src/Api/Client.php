@@ -144,7 +144,7 @@ final class Client
 
         if ($body !== null) {
             $headers['Content-Type'] = 'application/json';
-            $encoded = json_encode($body, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $encoded = (string) wp_json_encode($body, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         }
 
         if ($idempotencyKey !== null) {

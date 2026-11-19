@@ -164,7 +164,7 @@ final class Gateway extends WC_Payment_Gateway
 
         $html = '<tr valign="top"><th scope="row" class="titledesc"><label for="'.esc_attr($this->get_field_key($key)).'">'.esc_html($title).'</label></th>';
         $html .= '<td class="forminp"><fieldset><legend class="screen-reader-text"><span>'.esc_html($title).'</span></legend>';
-        $html .= '<input class="input-text regular-input" type="text" readonly id="'.esc_attr($this->get_field_key($key)).'" value="'.esc_attr($this->webhookUrl()).'" onfocus="this.select()" />';
+        $html .= '<input class="input-text regular-input" type="text" readonly id="'.esc_attr($this->get_field_key($key)).'" value="'.esc_attr($this->webhookUrl()).'" />';
 
         if (wp_parse_url(home_url(), PHP_URL_SCHEME) !== 'https') {
             $html .= '<p class="description" style="color:#b32d2e">'.esc_html__('This site\'s address starts with http://. VeliraPay only sends webhooks to https:// addresses on port 443, so the site has to answer on HTTPS at the URL above, without redirecting.', 'velirapay-for-woocommerce').'</p>';
@@ -555,7 +555,7 @@ final class Gateway extends WC_Payment_Gateway
 
         // Keyed by the invoice it replaces as well as its details, so a replay can never hand back an invoice voided since,
         // and a retry after a creation whose answer was lost gets that invoice rather than a second one.
-        $key = sprintf('woocommerce-order-%d-%s-%s', $order->get_id(), $order->get_order_key(), substr(sha1($replaced."\n".(string) json_encode($params)), 0, 16));
+        $key = sprintf('woocommerce-order-%d-%s-%s', $order->get_id(), $order->get_order_key(), substr(sha1($replaced."\n".(string) wp_json_encode($params)), 0, 16));
 
         $invoice = $this->createInvoice($client, $params, $key);
 

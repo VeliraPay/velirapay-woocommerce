@@ -417,6 +417,11 @@ function esc_url(string $url): string
     return htmlspecialchars($url, ENT_QUOTES);
 }
 
+function wp_json_encode(mixed $value, int $flags = 0, int $depth = 512): string|false
+{
+    return json_encode($value, $flags, $depth);
+}
+
 // As WordPress does for a URL it stores: nothing a URL cannot hold, and only the protocols allowed.
 function esc_url_raw(string $url, ?array $protocols = null): string
 {

@@ -27,7 +27,7 @@ final class Plugin
     /**
      * The plugin's version, as in its header.
      */
-    public const VERSION = '0.4.5';
+    public const VERSION = '0.4.6';
 
     /**
      * The WP-Cron hook that polls pending orders.
@@ -217,7 +217,8 @@ final class Plugin
     }
 
     /**
-     * Answer a webhook delivery posted to the WooCommerce API URL.
+     * Answer a webhook delivery posted to the WooCommerce API URL. The raw body is only checked against its signature,
+     * which covers every byte of it; the handler sanitizes each field once it is decoded, with Payload::sanitize().
      */
     public static function receiveWebhook(): void
     {
