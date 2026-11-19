@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.3
 WC tested up to: 11.3
-Stable tag: 0.4.4
+Stable tag: 0.4.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -103,6 +103,9 @@ From WordPress.org, once the plugin is listed there: WordPress then offers each 
 By hand. Send the coins back from your wallet and record the refund in the VeliraPay dashboard; the plugin adds a note to the order.
 
 == Changelog ==
+
+= 0.4.5 =
+* What VeliraPay sends, webhook deliveries and API answers alike, is sanitized as soon as it is decoded, before it reaches an order note, the order's meta or a redirect. A webhook's raw body is still checked against its signature as it came.
 
 = 0.4.4 =
 * A detected payment is noted the same way in every coin: the Lightning-specific order note and the "BTC (Lightning)" label are gone, since VeliraPay no longer offers Bitcoin over Lightning.

@@ -50,6 +50,17 @@ final class ClientTest extends TestCase
         );
     }
 
+    public function test_an_answers_text_is_sanitized_and_its_urls_kept_as_urls(): void
+    {
+        $client = $this->client(200, '{"data":{"id":"w7c2h5j9d3kx","number":"<b>INV-0042</b>","hosted_url":"https://velirapay.com/i/w7c2h5j9d3kx?lang=fr","charges":[{"id":"z8x6c4v2b0nm","asset_amount":"0.002500000000000000","credited":true,"confirmations":3,"memo":null}]}}');
+
+        $invoice = $client->retrieveInvoice('w7c2h5j9d3kx');
+
+        $this->assertSame('INV-0042', $invoice['number']);
+        $this->assertSame('https://velirapay.com/i/w7c2h5j9d3kx?lang=fr', $invoice['hosted_url']);
+        $this->assertSame([['id' => 'z8x6c4v2b0nm', 'asset_amount' => '0.002500000000000000', 'credited' => true, 'confirmations' => 3, 'memo' => null]], $invoice['charges']);
+    }
+
     public function test_retrieving_an_invoice_is_a_bare_get(): void
     {
         $client = $this->client(200, '{"data":{"id":"w7c2h5j9d3kx","status":"open"}}');

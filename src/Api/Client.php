@@ -155,7 +155,7 @@ final class Client
         $response = ($this->transport)($method, $url, $headers, $encoded, $timeout);
 
         $decoded = json_decode($response['body'], true);
-        $decoded = is_array($decoded) ? $decoded : [];
+        $decoded = is_array($decoded) ? Payload::sanitize($decoded) : [];
 
         if ($response['status'] < 200 || $response['status'] >= 300) {
             // Built before the throw, whose arguments are checked for escaping: fromResponse() escapes the API's message itself.

@@ -417,6 +417,14 @@ function esc_url(string $url): string
     return htmlspecialchars($url, ENT_QUOTES);
 }
 
+// As WordPress does for a URL it stores: nothing a URL cannot hold, and only the protocols allowed.
+function esc_url_raw(string $url, ?array $protocols = null): string
+{
+    $url = trim((string) preg_replace('~[^a-z0-9\-._\~:/?#\[\]@!$&\'()*+,;=%]~i', '', $url));
+
+    return in_array(strtolower((string) parse_url($url, PHP_URL_SCHEME)), $protocols ?? ['http', 'https'], true) ? $url : '';
+}
+
 function wp_kses_post(string $text): string
 {
     return $text;

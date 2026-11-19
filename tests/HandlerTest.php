@@ -222,6 +222,32 @@ final class HandlerTest extends TestCase
         $this->assertSame('Ignored: the delivery is not about an invoice.', $response['body']);
     }
 
+    public function test_a_deliverys_fields_are_sanitized_before_they_reach_the_order(): void
+    {
+        $order = new FakeOrder('pending');
+        $payload = json_encode([
+            'id' => '5f0c6f5e-8d1b-4a53-9a57-3c2b1d0e9f87',
+            'event_id' => "<b>9b1f7a3e</b>\n",
+            'event' => 'invoice.paid',
+            'mode' => 'live',
+            'data' => ['invoice' => [
+                'code' => 'w7c2h5j9d3kx',
+                'number' => '<img src=x onerror=alert(1)>INV-0042',
+                'status' => 'paid',
+                'amount' => '49.90',
+                'currency' => 'EUR',
+                'charges' => [['code' => 'z8x6c4v2b0nm', 'status' => 'paid']],
+            ]],
+        ], JSON_THROW_ON_ERROR);
+
+        $response = $this->handler($order)->handle($payload, Signature::header($payload, self::LIVE_SECRET));
+
+        $this->assertSame(200, $response['status']);
+        $this->assertSame('processing', $order->status);
+        $this->assertSame(['VeliraPay invoice INV-0042 paid (charge z8x6c4v2b0nm).'], $order->notes);
+        $this->assertSame(['9b1f7a3e'], $order->events);
+    }
+
     public function test_a_signed_payload_that_is_not_a_delivery_is_refused(): void
     {
         $payload = '["invoice.paid"]';

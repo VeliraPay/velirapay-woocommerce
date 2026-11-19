@@ -27,7 +27,7 @@ final class Plugin
     /**
      * The plugin's version, as in its header.
      */
-    public const VERSION = '0.4.4';
+    public const VERSION = '0.4.5';
 
     /**
      * The WP-Cron hook that polls pending orders.
@@ -660,7 +660,8 @@ final class Plugin
 
         if ($status === 401 || $status === 403) {
             $decoded = json_decode($body, true);
-            $message = is_array($decoded) && is_string($decoded['message'] ?? null) && $decoded['message'] !== '' ? $decoded['message'] : sprintf('HTTP %d', $status);
+            $message = is_array($decoded) && is_string($decoded['message'] ?? null) ? sanitize_text_field($decoded['message']) : '';
+            $message = $message !== '' ? $message : sprintf('HTTP %d', $status);
 
             set_transient($transient, $message, WEEK_IN_SECONDS);
 

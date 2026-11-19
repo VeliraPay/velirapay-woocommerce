@@ -2,6 +2,10 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
+## 0.4.5 - 2026-11-19
+
+- What VeliraPay sends, webhook deliveries and API answers alike, is sanitized as soon as it is decoded, before it reaches an order note, the order's meta or a redirect: text with `sanitize_text_field()`, URLs with `esc_url_raw()`. A webhook's raw body is still checked against its signature as it came.
+
 ## 0.4.4 - 2026-11-17
 
 - A detected payment is noted the same way in every coin: the Lightning-specific order note and the "BTC (Lightning)" label are gone, since VeliraPay no longer offers Bitcoin over Lightning.

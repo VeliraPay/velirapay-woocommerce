@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace VeliraPay\WooCommerce\Webhooks;
 
+use VeliraPay\WooCommerce\Api\Payload;
 use VeliraPay\WooCommerce\Orders\OrderRepository;
 use VeliraPay\WooCommerce\Orders\StatusSync;
 
@@ -45,7 +46,9 @@ final class Handler
             return self::answer(400, 'The signature is missing, invalid or too old.');
         }
 
+        // Only the raw body is signed, so it is checked as it came and sanitized once decoded.
         $delivery = json_decode($payload, true);
+        $delivery = is_array($delivery) ? Payload::sanitize($delivery) : null;
         $event = is_array($delivery) ? ($delivery['event'] ?? null) : null;
 
         if (! is_array($delivery) || ! is_string($event) || $event === '') {

@@ -312,7 +312,9 @@ final class Gateway extends WC_Payment_Gateway
             return ['result' => 'success', 'redirect' => $this->get_return_url($order)];
         }
 
-        return ['result' => 'success', 'redirect' => is_string($invoice['hosted_url'] ?? null) ? $invoice['hosted_url'] : $this->get_return_url($order)];
+        $hostedUrl = is_string($invoice['hosted_url'] ?? null) ? $invoice['hosted_url'] : '';
+
+        return ['result' => 'success', 'redirect' => $hostedUrl !== '' ? $hostedUrl : $this->get_return_url($order)];
     }
 
     /**
