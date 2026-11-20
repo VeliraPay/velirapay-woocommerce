@@ -28,9 +28,9 @@ The official WooCommerce plugin for [VeliraPay](https://velirapay.com), the cryp
 
 ## Installation
 
-Once the plugin is listed on WordPress.org, search for **VeliraPay for WooCommerce** under **Plugins → Add New Plugin**, install it and activate it. Until then, download `velirapay-for-woocommerce-<version>.zip` from the [releases](https://github.com/VeliraPay/velirapay-woocommerce/releases) and upload it under **Plugins → Add New Plugin → Upload Plugin**, or unzip it into `wp-content/plugins/`. The plugin has no runtime dependencies and needs no `composer install`.
+The plugin is on WordPress.org as [VeliraPay for WooCommerce](https://wordpress.org/plugins/velirapay-for-woocommerce/): search for it under **Plugins → Add New Plugin**, install it and activate it. Each version is also attached to its [release](https://github.com/VeliraPay/velirapay-woocommerce/releases) as `velirapay-for-woocommerce-<version>.zip`, to upload under **Plugins → Add New Plugin → Upload Plugin** or unzip into `wp-content/plugins/`. The plugin has no runtime dependencies and needs no `composer install`.
 
-New versions come from WordPress.org once the plugin is listed there, on WordPress's **Plugins** and **Updates** screens like any other plugin's. The zip unpacks to `velirapay-for-woocommerce/`, the plugin's slug on WordPress.org, so a copy installed from it gets those updates too. Until the plugin is listed, a new version is installed by uploading its zip. A copy installed from a zip of 0.3.1 or earlier sits in a `velirapay-woocommerce` folder instead: deactivate and delete it, then install the new one. Its settings are kept.
+New versions come from WordPress.org, on WordPress's **Plugins** and **Updates** screens like any other plugin's. The zip unpacks to `velirapay-for-woocommerce/`, the plugin's slug on WordPress.org, so a copy installed from it gets those updates too. A copy installed from a zip of 0.3.1 or earlier sits in a `velirapay-woocommerce` folder instead: deactivate and delete it, then install the new one. Its settings are kept.
 
 To build the zip yourself:
 
