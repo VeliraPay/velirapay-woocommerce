@@ -2,7 +2,7 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## 0.4.7 - 2026-11-20
 
 - Orders with a billing name can pay even when the store has no email address for the customer.
 

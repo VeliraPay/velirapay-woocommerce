@@ -27,7 +27,7 @@ final class Plugin
     /**
      * The plugin's version, as in its header.
      */
-    public const VERSION = '0.4.6';
+    public const VERSION = '0.4.7';
 
     /**
      * The WP-Cron hook that polls pending orders.

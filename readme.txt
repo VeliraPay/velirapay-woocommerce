@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.3
 WC tested up to: 11.3
-Stable tag: 0.4.6
+Stable tag: 0.4.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -103,6 +103,9 @@ From WordPress.org: WordPress offers each new version on its Plugins and Updates
 By hand. Send the coins back from your wallet and record the refund in the VeliraPay dashboard; the plugin adds a note to the order.
 
 == Changelog ==
+
+= 0.4.7 =
+* Orders with a billing name can pay even when the store has no email address for the customer.
 
 = 0.4.6 =
 * Requests to VeliraPay are encoded with wp_json_encode(), and the webhook URL field on the settings page no longer carries an inline script.
