@@ -31,7 +31,7 @@ Refunds are not automated. Crypto cannot be pulled back: send the coins from you
 
 This plugin connects to VeliraPay's API, https://api.velirapay.com, the crypto payment processor it adds to the store, to take payments:
 
-* When a customer pays an order, it creates a VeliraPay invoice for it, sending the customer's billing name and email address, the order total and currency, a memo with the order number and the store's name, and the addresses of the order's order-received and payment pages, for the hosted page to send the customer back to.
+* When a customer pays an order, it creates a VeliraPay invoice for it, sending the available billing name and billing or account email, the order total and currency, a memo with the order number and the store's name, and the addresses of the order's order-received and payment pages, for the hosted page to send the customer back to.
 * On the store's pages and the block checkout, while a customer has something in the cart or pays for an existing order, it reads which coins the store's VeliraPay account takes in the store currency, at most once every ten minutes, sending nothing about the customer or the cart.
 * It reads the order's invoice when the customer opens the order-received page, when you choose "Check VeliraPay status", every hour for orders waiting for payment, and before WooCommerce's "Hold stock" timer cancels an order.
 * It voids the order's invoice when the order is cancelled, trashed or deleted.
@@ -92,7 +92,7 @@ An order with an existing invoice keeps that invoice when you switch modes or ac
 
 = Does VeliraPay email my customers? =
 
-The invoice itself is not emailed: the customer is sent straight to its page. In live mode, VeliraPay still emails the billing address, on the store's behalf and alongside WooCommerce's own emails, a receipt when the payment confirms, a notice when it falls short, and a notice of each refund you record. In test mode it only emails addresses of your VeliraPay account's own members.
+The invoice itself is not emailed: the customer is sent straight to its page. In live mode, when a customer email address is available, VeliraPay emails that address on the store's behalf and alongside WooCommerce's own emails, a receipt when the payment confirms, a notice when it falls short, and a notice of each refund you record. In test mode it only emails addresses of your VeliraPay account's own members.
 
 = How is the plugin updated? =
 

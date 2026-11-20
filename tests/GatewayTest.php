@@ -246,16 +246,44 @@ final class GatewayTest extends TestCase
         $this->assertSame(['The crypto payment could not be started. Please try again or choose another payment method.'], array_column(wc_get_notices('error'), 'notice'));
     }
 
-    public function test_an_order_without_an_email_is_refused_before_asking_the_api(): void
+    public function test_a_name_only_order_creates_an_invoice_without_requesting_email(): void
     {
         $order = new WC_Order(1042);
         $order->set_billing_email('');
+
+        $body = $this->createdInvoiceBody($order);
+
+        $this->assertSame('Grace Hopper', $body['customer_name']);
+        $this->assertArrayNotHasKey('customer_email', $body);
+        $this->assertFalse($body['send_email']);
+    }
+
+    public function test_missing_billing_details_leave_an_outdated_invoice_in_place_until_the_order_can_be_paid(): void
+    {
+        $order = new class(1042) extends WC_Order
+        {
+            public function get_formatted_billing_full_name(): string
+            {
+                return '';
+            }
+        };
+        $order->set_billing_email('');
+        $order->update_meta_data(WooCommerceOrder::INVOICE_CODE_META, 'oldinvoice12');
         $GLOBALS['velirapay_test_orders'] = [1042 => $order];
-        $this->route([]);
+        $this->route([
+            'GET invoices/oldinvoice12' => [200, self::invoiceJson('oldinvoice12', 'open', '59.90')],
+            'POST invoices/oldinvoice12/void' => [200, self::invoiceJson('oldinvoice12', 'void', '59.90')],
+            'POST invoices' => [201, self::invoiceJson('newinvoice34', 'open', '49.90')],
+        ]);
 
         $this->assertSame(['result' => 'failure'], $this->gateway()->process_payment(1042));
-        $this->assertSame([], $this->sent);
-        $this->assertSame(['Crypto payment: an email address is needed to pay. Please enter your billing email address.'], array_column(wc_get_notices('error'), 'notice'));
+        $this->assertSame(['GET invoices/oldinvoice12'], array_column($this->sent, 0));
+        $this->assertSame('oldinvoice12', WooCommerceOrder::invoiceCodeOf($order));
+        $this->assertSame(['Crypto payment: please enter your billing name or email address to pay.'], array_column(wc_get_notices('error'), 'notice'));
+
+        $order->set_billing_email('grace@example.com');
+        $this->assertSame(['result' => 'success', 'redirect' => 'https://velirapay.com/i/newinvoice34'], $this->gateway()->process_payment(1042));
+        $this->assertSame('newinvoice34', WooCommerceOrder::invoiceCodeOf($order));
     }
 
     public function test_an_order_without_an_email_uses_its_customers_account_email(): void
@@ -443,10 +471,9 @@ final class GatewayTest extends TestCase
      *
      * @return array<array-key, mixed>
      */
-    private function createdInvoiceBody(): array
+    private function createdInvoiceBody(?WC_Order $order = null): array
     {
-        $order = new WC_Order(1042);
-        $order->set_billing_email('grace@example.com');
+        $order ??= new WC_Order(1042);
         $GLOBALS['velirapay_test_orders'] = [1042 => $order];
         $body = null;
         $GLOBALS['velirapay_test_http'] = static function (string $url, array $args) use (&$body): array {

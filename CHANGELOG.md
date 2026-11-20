@@ -2,6 +2,10 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+- Orders with a billing name can pay even when the store has no email address for the customer.
+
 ## 0.4.6 - 2026-11-19
 
 - Requests to VeliraPay are encoded with `wp_json_encode()`, and the webhook URL field on the settings page no longer carries an inline `onfocus` script.
