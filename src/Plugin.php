@@ -165,8 +165,8 @@ final class Plugin
         }
 
         $paragraphs = [
-            __('When a customer pays with crypto, this store sends VeliraPay (velirapay.com), its crypto payment processor, the customer\'s billing name and email address, the order total and currency, and the order number, to create an invoice the customer then pays on VeliraPay\'s hosted page.', 'velirapay-for-woocommerce'),
-            __('In live mode, VeliraPay emails the customer, on the store\'s behalf, a receipt when the payment confirms, a notice when it falls short, and a notice of each refund recorded.', 'velirapay-for-woocommerce'),
+            __('When a customer pays with crypto, this store sends VeliraPay (velirapay.com), its crypto payment processor, the available customer details (billing name and billing or account email), the order total and currency, and the order number, to create an invoice the customer then pays on VeliraPay\'s hosted page.', 'velirapay-for-woocommerce'),
+            __('In live mode, when a customer email address is available, VeliraPay sends the customer, on the store\'s behalf, a receipt when the payment confirms, a notice when it falls short, and a notice of each refund recorded.', 'velirapay-for-woocommerce'),
             sprintf(
                 /* translators: %s: VeliraPay's privacy policy URL */
                 __('VeliraPay\'s privacy policy: %s', 'velirapay-for-woocommerce'),

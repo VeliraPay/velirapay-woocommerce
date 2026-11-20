@@ -282,8 +282,8 @@ final class PluginTest extends TestCase
 
         $this->assertSame([[
             'VeliraPay for WooCommerce',
-            '<p>When a customer pays with crypto, this store sends VeliraPay (velirapay.com), its crypto payment processor, the customer&#039;s billing name and email address, the order total and currency, and the order number, to create an invoice the customer then pays on VeliraPay&#039;s hosted page.</p>'
-            .'<p>In live mode, VeliraPay emails the customer, on the store&#039;s behalf, a receipt when the payment confirms, a notice when it falls short, and a notice of each refund recorded.</p>'
+            '<p>When a customer pays with crypto, this store sends VeliraPay (velirapay.com), its crypto payment processor, the available customer details (billing name and billing or account email), the order total and currency, and the order number, to create an invoice the customer then pays on VeliraPay&#039;s hosted page.</p>'
+            .'<p>In live mode, when a customer email address is available, VeliraPay sends the customer, on the store&#039;s behalf, a receipt when the payment confirms, a notice when it falls short, and a notice of each refund recorded.</p>'
             .'<p>VeliraPay&#039;s privacy policy: https://velirapay.com/privacy</p>',
         ]], $GLOBALS['velirapay_test_privacy'] ?? null);
 

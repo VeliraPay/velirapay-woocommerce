@@ -496,7 +496,7 @@ final class Gateway extends WC_Payment_Gateway
      * @return array<string, mixed>
      *
      * @throws ApiException
-     * @throws InvalidArgumentException when a new invoice is needed and the order has no email to make it out to.
+     * @throws InvalidArgumentException when a new invoice has neither a customer name nor an email.
      */
     private function invoiceFor(WC_Order $order, Client $client): array
     {
@@ -516,11 +516,12 @@ final class Gateway extends WC_Payment_Gateway
             return $existing;
         }
 
+        $name = trim($order->get_formatted_billing_full_name());
         $email = $this->customerEmail($order);
 
-        // Checked before an outdated invoice is voided, so the customer can add one and still pay it.
-        if ($email === '') {
-            throw new InvalidArgumentException(esc_html__('an email address is needed to pay. Please enter your billing email address.', 'velirapay-for-woocommerce'));
+        // Validate the replacement before voiding the order's current invoice.
+        if ($name === '' && $email === '') {
+            throw new InvalidArgumentException(esc_html__('please enter your billing name or email address to pay.', 'velirapay-for-woocommerce'));
         }
 
         if ($existing !== null && $status === 'open' && ! $this->voidOutdated($client, $order, $code, $existing)) {
@@ -536,11 +537,9 @@ final class Gateway extends WC_Payment_Gateway
         $superseded = WooCommerceOrder::supersededInvoiceCodesOf($order);
         $replaced = $code !== '' ? $code : ($superseded === [] ? '' : $superseded[array_key_last($superseded)]);
 
-        $name = trim($order->get_formatted_billing_full_name());
-
         $params = [
             'customer_name' => mb_substr($name !== '' ? $name : __('Customer', 'velirapay-for-woocommerce'), 0, 255),
-            'customer_email' => $email,
+            ...($email !== '' ? ['customer_email' => $email] : []),
             'amount' => $amount,
             'currency' => $currency,
             'memo' => mb_substr(sprintf(
