@@ -116,23 +116,104 @@ final class GatewayTest extends TestCase
         $this->assertSame($creations[0][1], $creations[1][1]);
     }
 
-    public function test_the_void_of_an_outdated_invoice_delivered_during_its_replacement_leaves_the_order_alone(): void
+    /**
+     * Answer as VeliraPay does once a first request made the order's invoice and its answer was lost: every later request under that key is told the outcome is unknown.
+     *
+     * @param  int  $held  How many open invoices VeliraPay lists for the order: the one the lost request made, none, or more.
+     * @param  int  $listing  The status the list of open invoices answers with.
+     */
+    private function loseTheFirstAnswer(int $held = 1, int $listing = 200): void
     {
-        $order = $this->orderWithOutdatedInvoice();
-        $this->route([
-            'GET invoices/oldinvoice12' => [200, self::invoiceJson('oldinvoice12', 'open', '49.90')],
-            'POST invoices/oldinvoice12/void' => function (): array {
-                // VeliraPay announces the void as soon as it commits, before the store has the new invoice.
-                $this->deliver('invoice.voided', ['invoice' => ['code' => 'oldinvoice12', 'number' => 'INV-0041', 'status' => 'void']]);
+        $made = null;
 
-                return [200, self::invoiceJson('oldinvoice12', 'void', '49.90')];
-            },
-            'POST invoices' => [201, self::invoiceJson('newinvoice34', 'open', '64.90')],
-        ]);
+        $GLOBALS['velirapay_test_http'] = function (string $url, array $args) use (&$made, $held, $listing): array {
+            $route = (is_string($args['method'] ?? null) ? $args['method'] : '').' '.substr($url, strlen('https://api.velirapay.com/v1/'));
+            $headers = is_array($args['headers'] ?? null) ? $args['headers'] : [];
+            $key = is_string($headers['Idempotency-Key'] ?? null) ? $headers['Idempotency-Key'] : null;
+            $this->sent[] = [str_starts_with($route, 'GET invoices?') ? 'GET invoices?' : $route, $key];
+            $asked = is_string($args['body'] ?? null) ? (array) json_decode($args['body'], true) : [];
+            $invoice = fn (string $code): array => [...$asked, 'id' => $code, 'number' => 'INV-'.$code, 'status' => 'open', 'hosted_url' => 'https://velirapay.com/i/'.$code, 'charges' => []];
 
-        $this->assertSame(['result' => 'success', 'redirect' => 'https://velirapay.com/i/newinvoice34'], $this->gateway()->process_payment(1042));
+            if ($route === 'POST invoices' && $made === null) {
+                $made = $invoice('firstinvoice1');
+
+                return ['status' => 500, 'body' => '{"message":"Server Error"}'];
+            }
+
+            return match (true) {
+                $route === 'POST invoices' && str_ends_with((string) $key, '-again') => ['status' => 201, 'body' => (string) json_encode(['data' => $invoice('secondinvoice')])],
+                $route === 'POST invoices' => ['status' => 409, 'body' => '{"message":"A request with this Idempotency-Key was started and its answer was lost.","code":"idempotency_outcome_unknown"}'],
+                str_starts_with($route, 'GET invoices?') => ['status' => $listing, 'body' => (string) json_encode(['data' => array_fill(0, $held, $made)])],
+                $route === 'GET invoices/firstinvoice1' => ['status' => 200, 'body' => (string) json_encode(['data' => $made])],
+                default => ['status' => 404, 'body' => '{"message":"No such object."}'],
+            };
+        };
+    }
+
+    /**
+     * An invoice made by a request whose answer was lost is found again and becomes the order's, however often the customer tries: VeliraPay never holds two.
+     */
+    public function test_an_invoice_made_by_a_request_whose_answer_was_lost_is_found_rather_than_made_again(): void
+    {
+        $order = new WC_Order(1042);
+        $GLOBALS['velirapay_test_orders'] = [1042 => $order];
+        $this->loseTheFirstAnswer();
+
+        $attempts = array_map(fn (int $attempt): array => $this->gateway()->process_payment(1042), [1, 2, 3]);
+        $found = ['result' => 'success', 'redirect' => 'https://velirapay.com/i/firstinvoice1'];
+
+        $this->assertSame([['result' => 'failure'], $found, $found], $attempts);
+
+        $this->assertSame('firstinvoice1', WooCommerceOrder::invoiceCodeOf($order));
+        $keys = array_column(array_filter($this->sent, static fn (array $request): bool => $request[0] === 'POST invoices'), 1);
+        $this->assertCount(2, $keys);
+        $this->assertSame([], array_filter($keys, static fn (?string $key): bool => str_ends_with((string) $key, '-again')));
+    }
+
+    /**
+     * Only once VeliraPay holds no invoice for the order does the checkout go on under a second key, the same one every time.
+     */
+    public function test_a_key_whose_request_made_no_invoice_gives_way_to_a_second_key(): void
+    {
+        $order = new WC_Order(1042);
+        $GLOBALS['velirapay_test_orders'] = [1042 => $order];
+        $this->loseTheFirstAnswer(held: 0);
+
+        $this->gateway()->process_payment(1042);
+
+        $this->assertSame(['result' => 'success', 'redirect' => 'https://velirapay.com/i/secondinvoice'], $this->gateway()->process_payment(1042));
+        $this->assertSame('secondinvoice', WooCommerceOrder::invoiceCodeOf($order));
+        $keys = array_column(array_filter($this->sent, static fn (array $request): bool => $request[0] === 'POST invoices'), 1);
+        $this->assertSame($keys[1].'-again', $keys[2]);
+    }
+
+    /**
+     * Ways the invoice an earlier request may have made cannot be told.
+     *
+     * @return iterable<string, array{int, int}>
+     */
+    public static function untellableInvoices(): iterable
+    {
+        yield 'the open invoices cannot be read' => [1, 503];
+        yield 'more than one fits the order' => [2, 200];
+    }
+
+    /**
+     * While the invoice an earlier request may have made cannot be told, nothing is created: the order stays pending with a note.
+     */
+    #[DataProvider('untellableInvoices')]
+    public function test_nothing_is_created_while_an_earlier_invoice_cannot_be_told(int $held, int $listing): void
+    {
+        $order = new WC_Order(1042);
+        $GLOBALS['velirapay_test_orders'] = [1042 => $order];
+        $this->loseTheFirstAnswer($held, $listing);
+
+        $this->gateway()->process_payment(1042);
+
+        $this->assertSame(['result' => 'failure'], $this->gateway()->process_payment(1042));
+        $this->assertSame('', WooCommerceOrder::invoiceCodeOf($order));
         $this->assertSame('pending', $order->get_status());
-        $this->assertSame('newinvoice34', WooCommerceOrder::invoiceCodeOf($order));
+        $this->assertSame([], array_filter($this->sent, static fn (array $request): bool => str_ends_with((string) $request[1], '-again')));
     }
 
     /**

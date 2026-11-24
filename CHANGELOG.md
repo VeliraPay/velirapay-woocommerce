@@ -2,6 +2,14 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
+## 0.4.9 - 2026-11-24
+
+- When VeliraPay cannot say whether an earlier attempt to create an order's invoice went through, which it now answers with a 409 for a day rather than risk a second invoice, the plugin looks for that invoice among the open ones, by the order's return addresses, memo, amount and currency, and takes it as the order's. Only when VeliraPay holds none does the checkout go on under a second idempotency key; when the open invoices cannot be read, or more than one fits, nothing is created and the order keeps a note.
+- An `invoice.paid` that does not say how it was paid is refused with a 503 as well when the store has no API key to read the invoice with, instead of completing the order.
+- News of an invoice whose order has since moved to another payment method neither completes nor cancels that order: a payment to it puts the order on hold with a note, as for a replaced invoice, and its void is ignored.
+- An `invoice.voided` delivered after the invoice was paid no longer cancels the order held for you, whether it was held because you accepted the payment or because the order's total had changed.
+- An `invoice.paid` that does not say how its charge became paid, as a retry of a delivery first made before 2026-11-24 does not, is checked against the invoice as VeliraPay has it now, so a short payment you accepted is held even then. While the invoice cannot be read the order is left as it is and the delivery answered with a 503, so VeliraPay sends it again later.
+
 ## 0.4.8 - 2026-11-24
 
 - A webhook is only believed about the mode whose secret signed it: a live delivery signed with a test secret is refused with a 400, since a test secret is often shared with a staging site or a developer. Each endpoint's secret has to be in its own mode's field. A store with a live secret pasted into the test field, or the reverse, now refuses that mode's webhooks until the secret is moved; orders are still completed by the plugin's polling meanwhile.

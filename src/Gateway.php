@@ -7,6 +7,7 @@ namespace VeliraPay\WooCommerce;
 use InvalidArgumentException;
 use VeliraPay\WooCommerce\Api\ApiException;
 use VeliraPay\WooCommerce\Api\Client;
+use VeliraPay\WooCommerce\Api\Payload;
 use VeliraPay\WooCommerce\Orders\StatusSync;
 use VeliraPay\WooCommerce\Orders\WooCommerceOrder;
 use VeliraPay\WooCommerce\Webhooks\Signature;
@@ -42,6 +43,11 @@ final class Gateway extends WC_Payment_Gateway
      * The prefix of an endpoint's signing secret.
      */
     private const SECRET_PREFIX = 'whsec_';
+
+    /**
+     * What is added to an invoice's idempotency key once VeliraPay cannot say what the first request under it did and holds no invoice it made.
+     */
+    private const SECOND_KEY = '-again';
 
     /**
      * How many seconds the coins on offer are remembered for.
@@ -657,6 +663,10 @@ final class Gateway extends WC_Payment_Gateway
     /**
      * Create the invoice, waiting out the same checkout submitted twice, whose first request still holds the key.
      *
+     * When VeliraPay cannot say whether an earlier request under the key made its invoice, it keeps the key for a day. The
+     * invoice that request may have made is then looked for among the open ones and taken as the order's; only when
+     * VeliraPay has none does the checkout go on under a second key, so an order never gets two.
+     *
      * @param  array<string, mixed>  $params
      * @return array<string, mixed>
      *
@@ -668,6 +678,20 @@ final class Gateway extends WC_Payment_Gateway
             try {
                 return $client->createInvoice($params, $key);
             } catch (ApiException $exception) {
+                if ($exception->outcomeUnknown()) {
+                    $earlier = $this->earlierInvoice($client, $params);
+
+                    if ($earlier !== null) {
+                        return $earlier;
+                    }
+
+                    if (str_ends_with($key, self::SECOND_KEY)) {
+                        throw $exception;
+                    }
+
+                    return $this->createInvoice($client, $params, $key.self::SECOND_KEY);
+                }
+
                 if (! $exception->isConflict() || $attempt >= 3) {
                     throw $exception;
                 }
@@ -675,6 +699,43 @@ final class Gateway extends WC_Payment_Gateway
                 sleep(1);
             }
         }
+    }
+
+    /**
+     * Find the open invoice an earlier request with these details made, or null when VeliraPay has none.
+     *
+     * It is told by what names the order, its return addresses and its memo, beside the amount and the currency.
+     *
+     * @param  array<string, mixed>  $params  The details the invoice was asked for with.
+     * @return array<string, mixed>|null
+     *
+     * @throws ApiException when the open invoices could not be read, or more than one fits, so that nothing is created on a guess.
+     */
+    private function earlierInvoice(Client $client, array $params): ?array
+    {
+        // What VeliraPay sends back is sanitized as it is decoded, so the details are compared the way they come back.
+        $sent = Payload::sanitize($params);
+        $term = $sent['customer_email'] ?? $sent['customer_name'] ?? '';
+        $listed = $client->openInvoicesMatching(is_string($term) ? $term : '');
+
+        $found = array_values(array_filter($listed, static function (array $invoice) use ($sent): bool {
+            foreach (['amount', 'currency', 'memo', 'success_url', 'cancel_url'] as $field) {
+                if (($invoice[$field] ?? null) !== ($sent[$field] ?? null)) {
+                    return false;
+                }
+            }
+
+            return ($invoice['status'] ?? null) === 'open';
+        }));
+
+        if (count($found) > 1 || ($found === [] && count($listed) >= Client::LISTED)) {
+            throw new ApiException(esc_html__('VeliraPay may already hold an invoice for this order and it could not be told apart. Check the open invoices in the VeliraPay dashboard before the customer tries again.', 'velirapay-for-woocommerce'), 409);
+        }
+
+        /** @var array<string, mixed>|null $earlier */
+        $earlier = $found[0] ?? null;
+
+        return $earlier;
     }
 
     /**

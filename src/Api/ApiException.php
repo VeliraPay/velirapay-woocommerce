@@ -18,8 +18,9 @@ final class ApiException extends RuntimeException
      *
      * @param  int  $status  The HTTP status the API answered with, or 0 when it could not be reached.
      * @param  array<string, list<string>>  $errors  The validation messages, keyed by field.
+     * @param  string|null  $reason  The API's stable name for the error, which only a few carry.
      */
-    public function __construct(string $message, public readonly int $status, public readonly array $errors = [])
+    public function __construct(string $message, public readonly int $status, public readonly array $errors = [], public readonly ?string $reason = null)
     {
         parent::__construct($message, $status);
     }
@@ -42,7 +43,16 @@ final class ApiException extends RuntimeException
             is_string($message) && $message !== '' ? esc_html($message) : "The VeliraPay API answered with HTTP {$status}.",
             $status,
             $errors,
+            is_string($body['code'] ?? null) ? $body['code'] : null,
         );
+    }
+
+    /**
+     * Determine if the API cannot say whether an earlier request under the same idempotency key was carried out, and keeps the key claimed.
+     */
+    public function outcomeUnknown(): bool
+    {
+        return $this->isConflict() && $this->reason === 'idempotency_outcome_unknown';
     }
 
     /**

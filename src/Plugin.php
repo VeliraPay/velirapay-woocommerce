@@ -27,7 +27,7 @@ final class Plugin
     /**
      * The plugin's version, as in its header.
      */
-    public const VERSION = '0.4.8';
+    public const VERSION = '0.4.9';
 
     /**
      * The WP-Cron hook that polls pending orders.
@@ -225,7 +225,18 @@ final class Plugin
         $gateway = self::gateway();
         $payload = (string) file_get_contents('php://input');
 
-        $handler = new Handler(new WooCommerceOrders, new StatusSync, $gateway->mode(), $gateway->webhookSecrets());
+        $client = $gateway->client();
+
+        // Asked only for a delivery stored before VeliraPay said how a charge became paid; unreachable, or with no key to ask with, the delivery is refused and sent again.
+        $currentInvoice = $client === null ? null : static function (string $code) use ($client): ?array {
+            try {
+                return $client->retrieveInvoice($code);
+            } catch (ApiException) {
+                return null;
+            }
+        };
+
+        $handler = new Handler(new WooCommerceOrders, new StatusSync, $gateway->mode(), $gateway->webhookSecrets(), $currentInvoice);
         $response = $handler->handle($payload, self::signatureHeader());
 
         if ($response['status'] >= 400) {

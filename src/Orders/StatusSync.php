@@ -71,7 +71,7 @@ final class StatusSync
 
         match ($event) {
             'invoice.paid' => $this->markPaid($order, $invoice),
-            'invoice.voided' => $this->cancel($order, __('The VeliraPay invoice was voided and can no longer be paid.', 'velirapay-for-woocommerce')),
+            'invoice.voided' => $this->voided($order, $invoice),
             'invoice.viewed' => $order->addNote(__('The customer opened the VeliraPay invoice.', 'velirapay-for-woocommerce')),
             'charge.created' => $order->addNote(sprintf(
                 /* translators: 1: coin, 2: amount, 3: charge code */
@@ -455,6 +455,30 @@ final class StatusSync
         }
 
         return $paid[0] ?? '';
+    }
+
+    /**
+     * Cancel the order of a voided invoice, unless the void is old news: delivered after the invoice was paid, whose
+     * order was then held for the merchant, because they accepted the payment or the order's total had changed, or
+     * left as it was.
+     *
+     * @param  array<array-key, mixed>  $invoice
+     */
+    private function voided(Order $order, array $invoice): void
+    {
+        $code = self::text($invoice['code'] ?? $invoice['id'] ?? null);
+
+        if ($order->hasHandledEvent('amount-mismatch:'.$code) || $order->hasHandledEvent('left-alone:'.$code)) {
+            return;
+        }
+
+        foreach (is_array($invoice['charges'] ?? null) ? $invoice['charges'] : [] as $charge) {
+            if (is_array($charge) && $order->hasHandledEvent('accepted:'.self::text($charge['code'] ?? $charge['id'] ?? null))) {
+                return;
+            }
+        }
+
+        $this->cancel($order, __('The VeliraPay invoice was voided and can no longer be paid.', 'velirapay-for-woocommerce'));
     }
 
     /**

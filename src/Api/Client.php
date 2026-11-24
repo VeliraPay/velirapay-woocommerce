@@ -25,6 +25,11 @@ final class Client
     public const TIMEOUT = 15;
 
     /**
+     * How many invoices a list asks for, the most the API gives at once.
+     */
+    public const LISTED = 100;
+
+    /**
      * The prefix of a live API key.
      */
     public const LIVE_PREFIX = 'vp_live_';
@@ -95,6 +100,20 @@ final class Client
     public function retrieveInvoice(string $code): array
     {
         return $this->request('GET', 'invoices/'.self::segment($code));
+    }
+
+    /**
+     * List the newest open invoices whose number, customer name or customer email holds a term, a hundred at most.
+     *
+     * @return list<array<array-key, mixed>>
+     *
+     * @throws ApiException
+     */
+    public function openInvoicesMatching(string $search): array
+    {
+        $invoices = $this->request('GET', 'invoices?'.http_build_query(['status' => 'open', 'search' => $search, 'per_page' => self::LISTED], '', '&', PHP_QUERY_RFC3986));
+
+        return array_values(array_filter($invoices, 'is_array'));
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace VeliraPay\WooCommerce\Webhooks;
 
+use Closure;
 use VeliraPay\WooCommerce\Api\Payload;
 use VeliraPay\WooCommerce\Orders\OrderRepository;
 use VeliraPay\WooCommerce\Orders\StatusSync;
@@ -25,12 +26,14 @@ final class Handler
      *
      * @param  string  $mode  The mode the gateway works in, "live" or "test"; deliveries of the other mode are ignored.
      * @param  array{live: list<string>, test: list<string>}  $secrets  The endpoint secrets deliveries of each mode may be signed with.
+     * @param  (Closure(string): (array<array-key, mixed>|null))|null  $currentInvoice  Reads an invoice as VeliraPay has it now, or null when it cannot be read; without one, no invoice can be read.
      */
     public function __construct(
         private OrderRepository $orders,
         private StatusSync $sync,
         private string $mode,
         private array $secrets,
+        private ?Closure $currentInvoice = null,
     ) {}
 
     /**
@@ -94,6 +97,11 @@ final class Handler
             $superseded = $order !== null;
         }
 
+        // An order moved to another payment method is no longer this invoice's to complete or cancel: news of it is handled as a replaced invoice's is.
+        if ($order !== null && ! $order->paysThroughGateway()) {
+            $superseded = true;
+        }
+
         // Acknowledged rather than refused: VeliraPay retries a refusal and switches the endpoint off after repeated ones,
         // and an invoice made outside the store is no error.
         if ($order === null) {
@@ -107,6 +115,19 @@ final class Handler
             return self::answer(200, 'Already handled.');
         }
 
+        // A delivery stored before VeliraPay said how a charge became paid cannot tell an accepted short payment from a
+        // full one, so the invoice of an order it could complete is read as it is now. While it cannot be read the order is left as it is and the delivery
+        // refused, so VeliraPay sends it again later rather than the order being fulfilled on a guess.
+        if ($event === 'invoice.paid' && ! $superseded && ! self::saysHowItWasPaid($data['invoice'] ?? null)) {
+            $current = $this->currentInvoice === null ? null : ($this->currentInvoice)($code);
+
+            if ($current === null || ($current['status'] ?? null) !== 'paid') {
+                return self::answer(503, sprintf('Invoice %s could not be read to see how it was paid. Send the delivery again later.', $code));
+            }
+
+            $data['invoice'] = $current;
+        }
+
         if ($superseded) {
             $this->sync->applySupersededEvent($order, $event, $data);
         } else {
@@ -118,6 +139,20 @@ final class Handler
         }
 
         return self::answer(200, sprintf($superseded ? 'Handled %s for invoice %s, which the order has replaced.' : 'Handled %s for invoice %s.', $event, $code));
+    }
+
+    /**
+     * Determine if an invoice names, for every charge that paid it, whether the merchant accepted the payment.
+     */
+    private static function saysHowItWasPaid(mixed $invoice): bool
+    {
+        foreach (is_array($invoice) && is_array($invoice['charges'] ?? null) ? $invoice['charges'] : [] as $charge) {
+            if (is_array($charge) && ($charge['status'] ?? null) === 'paid' && ! array_key_exists('accepted_at', $charge)) {
+                return false;
+            }
+        }
+
+        return is_array($invoice);
     }
 
     /**

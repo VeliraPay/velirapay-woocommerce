@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace VeliraPay\WooCommerce\Orders;
 
+use VeliraPay\WooCommerce\Gateway;
 use WC_Meta_Data;
 use WC_Order;
 
@@ -127,6 +128,14 @@ final class WooCommerceOrder implements Order
     public function status(): string
     {
         return $this->order->get_status();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function paysThroughGateway(): bool
+    {
+        return $this->order->get_payment_method() === Gateway::ID;
     }
 
     /**

@@ -26,7 +26,7 @@ final class HandlerTest extends TestCase
             'status' => 'paid',
             'amount' => '49.90',
             'currency' => 'EUR',
-            'charges' => [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC']],
+            'charges' => [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'asset' => 'USDC', 'accepted_at' => null]],
         ]]);
 
         $response = $this->handler($order)->handle($payload, Signature::header($payload, self::LIVE_SECRET));
@@ -77,6 +77,87 @@ final class HandlerTest extends TestCase
         $this->assertSame(400, $response['status']);
         $this->assertSame('pending', $order->status);
         $this->assertSame([], $order->events);
+    }
+
+    /**
+     * A delivery stored before VeliraPay said how a charge became paid is read against the invoice as it is now, so an accepted short payment is held even then.
+     */
+    public function test_a_paid_delivery_that_does_not_say_how_is_checked_against_the_invoice_as_it_is_now(): void
+    {
+        $order = new FakeOrder('pending');
+        $payload = self::payload('invoice.paid', 'live', ['invoice' => ['code' => 'w7c2h5j9d3kx', 'number' => 'INV-0042', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR', 'charges' => [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']]]]);
+        $asked = [];
+        $now = function (string $code) use (&$asked): array {
+            $asked[] = $code;
+
+            return ['id' => 'w7c2h5j9d3kx', 'number' => 'INV-0042', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR', 'charges' => [['id' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC', 'accepted_at' => '2026-11-24T10:00:00.000000Z']]];
+        };
+        $handler = new Handler(new FakeOrders(['w7c2h5j9d3kx' => $order]), new StatusSync, 'live', ['live' => [self::LIVE_SECRET], 'test' => []], $now);
+
+        $this->assertSame(200, $handler->handle($payload, Signature::header($payload, self::LIVE_SECRET))['status']);
+        $this->assertSame(['w7c2h5j9d3kx'], $asked);
+        $this->assertSame('on-hold', $order->status);
+        $this->assertNull($order->transactionId);
+
+        // One that says so is believed as it came.
+        $said = new FakeOrder('pending');
+        $payload = self::payload('invoice.paid', 'live', ['invoice' => ['code' => 'w7c2h5j9d3kx', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR', 'charges' => [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC', 'accepted_at' => null]]]]);
+        $handler = new Handler(new FakeOrders(['w7c2h5j9d3kx' => $said]), new StatusSync, 'live', ['live' => [self::LIVE_SECRET], 'test' => []], fn (string $code): array => throw new \LogicException('Not asked.'));
+
+        $handler->handle($payload, Signature::header($payload, self::LIVE_SECRET));
+        $this->assertSame('processing', $said->status);
+    }
+
+    /**
+     * While the invoice cannot be read, such a delivery changes nothing and is refused so VeliraPay sends it again, and the retry is handled once it can.
+     */
+    public function test_a_paid_delivery_that_does_not_say_how_waits_while_the_invoice_cannot_be_read(): void
+    {
+        $order = new FakeOrder('pending');
+        $payload = self::payload('invoice.paid', 'live', ['invoice' => ['code' => 'w7c2h5j9d3kx', 'number' => 'INV-0042', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR', 'charges' => [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']]]]);
+        $answers = [null, ['id' => 'w7c2h5j9d3kx', 'number' => 'INV-0042', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR', 'charges' => [['id' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC', 'accepted_at' => null]]]];
+        $now = function (string $code) use (&$answers): ?array {
+            return array_shift($answers);
+        };
+        $handler = new Handler(new FakeOrders(['w7c2h5j9d3kx' => $order]), new StatusSync, 'live', ['live' => [self::LIVE_SECRET], 'test' => []], $now);
+
+        $this->assertSame(503, $handler->handle($payload, Signature::header($payload, self::LIVE_SECRET))['status']);
+        $this->assertSame('pending', $order->status);
+        $this->assertSame([], $order->notes);
+
+        $this->assertSame(200, $handler->handle($payload, Signature::header($payload, self::LIVE_SECRET))['status']);
+        $this->assertSame('processing', $order->status);
+
+        // With no API key to read the invoice with, it cannot be read either.
+        $unasked = new FakeOrder('pending');
+        $handler = new Handler(new FakeOrders(['w7c2h5j9d3kx' => $unasked]), new StatusSync, 'live', ['live' => [self::LIVE_SECRET], 'test' => []]);
+
+        $this->assertSame(503, $handler->handle($payload, Signature::header($payload, self::LIVE_SECRET))['status']);
+        $this->assertSame('pending', $unasked->status);
+        $this->assertSame([], $unasked->events);
+    }
+
+    /**
+     * An order since moved to another payment method is neither completed nor cancelled by news of its old invoice, which is noted on it as a replaced invoice's is.
+     */
+    public function test_news_of_an_invoice_whose_order_moved_to_another_payment_method_neither_completes_nor_cancels_it(): void
+    {
+        $order = new FakeOrder('pending');
+        $order->throughGateway = false;
+        $handler = new Handler(new FakeOrders(['w7c2h5j9d3kx' => $order]), new StatusSync, 'live', ['live' => [self::LIVE_SECRET], 'test' => []]);
+
+        $void = self::payload('invoice.voided', 'live', ['invoice' => ['code' => 'w7c2h5j9d3kx', 'number' => 'INV-0042', 'status' => 'void']]);
+        $this->assertSame(200, $handler->handle($void, Signature::header($void, self::LIVE_SECRET))['status']);
+        $this->assertSame('pending', $order->status);
+
+        $moved = new FakeOrder('pending');
+        $moved->throughGateway = false;
+        $handler = new Handler(new FakeOrders(['w7c2h5j9d3kx' => $moved]), new StatusSync, 'live', ['live' => [self::LIVE_SECRET], 'test' => []]);
+        $paid = self::payload('invoice.paid', 'live', ['invoice' => ['code' => 'w7c2h5j9d3kx', 'number' => 'INV-0042', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR', 'charges' => [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC']]]]);
+
+        $this->assertSame(200, $handler->handle($paid, Signature::header($paid, self::LIVE_SECRET))['status']);
+        $this->assertSame('on-hold', $moved->status);
+        $this->assertNull($moved->transactionId);
     }
 
     /**
@@ -253,7 +334,7 @@ final class HandlerTest extends TestCase
                 'status' => 'paid',
                 'amount' => '49.90',
                 'currency' => 'EUR',
-                'charges' => [['code' => 'z8x6c4v2b0nm', 'status' => 'paid']],
+                'charges' => [['code' => 'z8x6c4v2b0nm', 'status' => 'paid', 'accepted_at' => null]],
             ]],
         ], JSON_THROW_ON_ERROR);
 

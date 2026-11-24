@@ -373,6 +373,38 @@ final class StatusSyncTest extends TestCase
         $this->assertSame('k3v9x2m7q8wz', $order->transactionId);
     }
 
+    /**
+     * A void can be delivered after the payment that was accepted on its invoice, and must not cancel the order held for the merchant.
+     */
+    public function test_a_void_delivered_after_an_accepted_payment_leaves_the_order_on_hold(): void
+    {
+        $order = new FakeOrder('pending');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC', 'accepted_at' => '2026-11-24T10:00:00.000000Z']])]);
+        $sync->applyEvent($order, 'invoice.voided', ['invoice' => self::invoice('void', [['code' => 'k3v9x2m7q8wz', 'status' => 'expired', 'asset' => 'BTC', 'accepted_at' => null]])]);
+
+        $this->assertSame('on-hold', $order->status);
+        $this->assertCount(1, $order->notes);
+    }
+
+    /**
+     * An order whose total changed is held when its invoice is paid, and a void delivered after that must not cancel it either.
+     */
+    public function test_a_void_delivered_after_a_payment_for_another_total_leaves_the_order_on_hold(): void
+    {
+        $order = new FakeOrder('pending', total: '59.90');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC', 'accepted_at' => null]])]);
+        $this->assertSame('on-hold', $order->status);
+
+        $sync->applyEvent($order, 'invoice.voided', ['invoice' => self::invoice('void', [['code' => 'k3v9x2m7q8wz', 'status' => 'expired', 'asset' => 'BTC', 'accepted_at' => null]])]);
+
+        $this->assertSame('on-hold', $order->status);
+        $this->assertCount(1, $order->notes);
+    }
+
     public function test_an_invoice_paid_after_a_short_payment_with_no_top_up_holds_the_order(): void
     {
         $order = new FakeOrder('pending');

@@ -22,6 +22,11 @@ interface Order
     public function isPaid(): bool;
 
     /**
+     * Determine if the order is still to be paid through this gateway, rather than another payment method chosen since.
+     */
+    public function paysThroughGateway(): bool;
+
+    /**
      * Get what the order comes to, such as "49.90".
      */
     public function total(): string;

@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.3
 WC tested up to: 11.3
-Stable tag: 0.4.8
+Stable tag: 0.4.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -76,7 +76,7 @@ Cancelling an order voids its invoice, so the hosted page no longer takes paymen
 
 = What if the customer pays too little, or too late? =
 
-The order goes "On hold" with a note. The customer can still send the rest of a short payment on the invoice page, which completes the order as usual. A short payment you accept in the VeliraPay dashboard, or a late one, which has to be accepted there whether you keep it or refund it, leaves the order on hold rather than marking it paid: move it to "Processing" to fulfil it, or cancel it once the payment is refunded. This relies on the charge.underpaid, charge.payment_detected and charge.late_payment webhooks: without them, a paid invoice marks the order paid.
+The order goes "On hold" with a note. The customer can still send the rest of a short payment on the invoice page, which completes the order as usual. A short payment you accept in the VeliraPay dashboard, or a late one, which has to be accepted there whether you keep it or refund it, leaves the order on hold rather than marking it paid: move it to "Processing" to fulfil it, or cancel it once the payment is refunded. The plugin reads this from the paid invoice itself, where VeliraPay says when a payment was accepted, so it holds whichever events the webhook endpoint is subscribed to.
 
 = What if a webhook never arrives? =
 
@@ -103,6 +103,12 @@ From WordPress.org: WordPress offers each new version on its Plugins and Updates
 By hand. Send the coins back from your wallet and record the refund in the VeliraPay dashboard; the plugin adds a note to the order.
 
 == Changelog ==
+
+= 0.4.9 =
+* A void notice delivered after an invoice was paid no longer cancels the order held for you.
+* A payment notice that does not say whether you accepted a short payment is checked against VeliraPay before the order is completed, and waits to be sent again while VeliraPay cannot be reached or no API key is saved.
+* An order never gets a second invoice when the answer to its first was lost: the plugin finds the first one again.
+* News of an old invoice no longer completes or cancels an order that moved to another payment method.
 
 = 0.4.8 =
 * A webhook is only believed about the mode whose secret signed it, so a test secret cannot mark a live order paid. Keep each webhook secret in its own mode's field.

@@ -36,6 +36,11 @@ final class FakeOrder implements Order
     public bool $hasPaymentDate = false;
 
     /**
+     * Whether the order is still to be paid through the gateway.
+     */
+    public bool $throughGateway = true;
+
+    /**
      * Create an order in a status, for a total.
      */
     public function __construct(public string $status = 'pending', public string $total = '49.90', public string $currency = 'EUR') {}
@@ -46,6 +51,14 @@ final class FakeOrder implements Order
     public function status(): string
     {
         return $this->status;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function paysThroughGateway(): bool
+    {
+        return $this->throughGateway;
     }
 
     /**
