@@ -24,7 +24,7 @@ final class Handler
      * Create a new handler.
      *
      * @param  string  $mode  The mode the gateway works in, "live" or "test"; deliveries of the other mode are ignored.
-     * @param  list<string>  $secrets  Every endpoint secret deliveries may be signed with, live and test.
+     * @param  array{live: list<string>, test: list<string>}  $secrets  The endpoint secrets deliveries of each mode may be signed with.
      */
     public function __construct(
         private OrderRepository $orders,
@@ -42,7 +42,9 @@ final class Handler
      */
     public function handle(string $payload, ?string $signatureHeader): array
     {
-        if (! Signature::verify($payload, $signatureHeader, $this->secrets)) {
+        $signedFor = array_keys(array_filter($this->secrets, static fn (array $secrets): bool => Signature::verify($payload, $signatureHeader, $secrets)));
+
+        if ($signedFor === []) {
             return self::answer(400, 'The signature is missing, invalid or too old.');
         }
 
@@ -66,7 +68,14 @@ final class Handler
             return self::answer(200, 'Test delivery received.');
         }
 
-        if (($delivery['mode'] ?? null) !== $this->mode) {
+        // A test secret says nothing about a live order, whoever holds it, so the delivery's mode has to be the one its secret is for.
+        $mode = $delivery['mode'] ?? null;
+
+        if (! in_array($mode, $signedFor, true)) {
+            return self::answer(400, 'The delivery was signed with the webhook secret of the other mode.');
+        }
+
+        if ($mode !== $this->mode) {
             return self::answer(200, sprintf('Ignored: the gateway is in %s mode.', $this->mode));
         }
 

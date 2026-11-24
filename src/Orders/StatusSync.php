@@ -265,6 +265,7 @@ final class StatusSync
 
         $charge = $this->payingCharge($order, $invoice);
         $number = self::text($invoice['number'] ?? null);
+        $saidAccepted = self::acceptedOn($invoice, $charge);
 
         if (! self::covers($invoice, $order)) {
             // Remembered like an event, so the webhook and every later poll note the mismatch once between them.
@@ -294,22 +295,29 @@ final class StatusSync
             return;
         }
 
-        if ($this->wasAccepted($order, $charge)) {
+        if ($this->wasAccepted($order, $charge, $invoice)) {
             // Noted once between the webhook and every later poll, as the mismatch is.
             if (! $order->hasHandledEvent('accepted:'.$charge)) {
-                $note = $order->hasHandledEvent('late:'.$charge)
-                    ? sprintf(
+                $note = match (true) {
+                    $saidAccepted === true && ! $order->hasHandledEvent('late:'.$charge) => sprintf(
+                        /* translators: 1: invoice number, 2: charge code */
+                        __('VeliraPay invoice %1$s was paid by accepting a short or late payment on charge %2$s in the VeliraPay dashboard, so this order was not marked paid. Move it to Processing to fulfil it, or cancel it once the payment is refunded.', 'velirapay-for-woocommerce'),
+                        $number,
+                        $charge,
+                    ),
+                    $order->hasHandledEvent('late:'.$charge) => sprintf(
                         /* translators: 1: invoice number, 2: charge code */
                         __('VeliraPay invoice %1$s was paid by accepting the late payment on charge %2$s, so this order was not marked paid. Move it to Processing to fulfil it, or cancel it once the payment is refunded.', 'velirapay-for-woocommerce'),
                         $number,
                         $charge,
-                    )
-                    : sprintf(
+                    ),
+                    default => sprintf(
                         /* translators: 1: invoice number, 2: charge code */
                         __('VeliraPay invoice %1$s was paid, but charge %2$s was last reported short and no top-up was seen since, so the short payment was most likely accepted and this order was not marked paid. Check the charge in the VeliraPay dashboard, then move the order to Processing to fulfil it, or cancel it once the payment is refunded.', 'velirapay-for-woocommerce'),
                         $number,
                         $charge,
-                    );
+                    ),
+                };
 
                 if ($order->status() === 'cancelled') {
                     $this->holdCancelled($order, $note);
@@ -392,12 +400,21 @@ final class StatusSync
 
     /**
      * Determine if the charge was paid by the merchant accepting it rather than by the customer's payment covering it:
-     * a late payment reached it, or it was last reported short and no transfer was seen after.
+     * the invoice says so, or, where it does not say either way, a late payment reached the charge or it was last
+     * reported short and no transfer was seen after.
+     *
+     * @param  array<array-key, mixed>  $invoice
      */
-    private function wasAccepted(Order $order, string $charge): bool
+    private function wasAccepted(Order $order, string $charge, array $invoice = []): bool
     {
         if ($charge === '') {
             return false;
+        }
+
+        $said = self::acceptedOn($invoice, $charge);
+
+        if ($said !== null) {
+            return $said;
         }
 
         if ($order->hasHandledEvent('late:'.$charge)) {
@@ -432,7 +449,7 @@ final class StatusSync
         $paid = self::chargesWithStatus($invoice, 'paid');
 
         foreach ($paid as $charge) {
-            if (! $this->wasAccepted($order, $charge)) {
+            if (! $this->wasAccepted($order, $charge, $invoice)) {
                 return $charge;
             }
         }
@@ -617,6 +634,23 @@ final class StatusSync
     private static function money(mixed $value): string
     {
         return is_numeric($value) ? number_format((float) $value, 2, '.', '') : '';
+    }
+
+    /**
+     * Get what the invoice says about how one of its charges became paid: true when the merchant accepted a short or
+     * late payment, false when the payment covered it, and null when the invoice does not say, as before VeliraPay did.
+     *
+     * @param  array<array-key, mixed>  $invoice
+     */
+    private static function acceptedOn(array $invoice, string $code): ?bool
+    {
+        foreach (is_array($invoice['charges'] ?? null) ? $invoice['charges'] : [] as $charge) {
+            if (is_array($charge) && $code !== '' && self::text($charge['code'] ?? $charge['id'] ?? null) === $code && array_key_exists('accepted_at', $charge)) {
+                return self::text($charge['accepted_at']) !== '';
+            }
+        }
+
+        return null;
     }
 
     /**

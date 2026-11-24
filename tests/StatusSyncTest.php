@@ -337,6 +337,42 @@ final class StatusSyncTest extends TestCase
         $this->assertSame('VeliraPay invoice INV-0042 was paid by accepting the late payment on charge k3v9x2m7q8wz, so this order was not marked paid. Move it to Processing to fulfil it, or cancel it once the payment is refunded.', $order->notes[1]);
     }
 
+    /**
+     * The invoice says how its charge became paid, so the order is held even when no webhook about the short or late payment ever reached the store.
+     */
+    public function test_an_invoice_that_says_its_charge_was_accepted_holds_the_order_whatever_arrived_before(): void
+    {
+        $accepted = [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC', 'paid_at' => '2026-11-24T10:00:00.000000Z', 'accepted_at' => '2026-11-24T10:00:00.000000Z']];
+
+        $byWebhook = new FakeOrder('pending');
+        (new StatusSync)->applyEvent($byWebhook, 'invoice.paid', ['invoice' => self::invoice('paid', $accepted)]);
+
+        $this->assertSame('on-hold', $byWebhook->status);
+        $this->assertNull($byWebhook->transactionId);
+        $this->assertSame(['VeliraPay invoice INV-0042 was paid by accepting a short or late payment on charge k3v9x2m7q8wz in the VeliraPay dashboard, so this order was not marked paid. Move it to Processing to fulfil it, or cancel it once the payment is refunded.'], $byWebhook->notes);
+
+        $byPolling = new FakeOrder('pending');
+        (new StatusSync)->applyInvoice($byPolling, self::invoice('paid', [['id' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC', 'accepted_at' => '2026-11-24T10:00:00.000000Z']]));
+
+        $this->assertSame('on-hold', $byPolling->status);
+        $this->assertNull($byPolling->transactionId);
+    }
+
+    /**
+     * What the invoice says outweighs the guess made from earlier webhooks: a short payment topped up without the store seeing the top-up is a paid order.
+     */
+    public function test_an_invoice_that_says_the_payment_covered_its_charge_completes_the_order_despite_an_earlier_short_payment(): void
+    {
+        $order = new FakeOrder('pending');
+        $sync = new StatusSync;
+
+        $sync->applyEvent($order, 'charge.underpaid', ['charge' => self::charge('underpaid', ['received_amount' => '0.002000000000000000', 'transactions' => [self::transfer('t1', true)]])]);
+        $sync->applyEvent($order, 'invoice.paid', ['invoice' => self::invoice('paid', [['code' => 'k3v9x2m7q8wz', 'status' => 'paid', 'asset' => 'BTC', 'accepted_at' => null]])]);
+
+        $this->assertSame('processing', $order->status);
+        $this->assertSame('k3v9x2m7q8wz', $order->transactionId);
+    }
+
     public function test_an_invoice_paid_after_a_short_payment_with_no_top_up_holds_the_order(): void
     {
         $order = new FakeOrder('pending');
@@ -618,7 +654,7 @@ final class StatusSyncTest extends TestCase
     /**
      * Build an invoice as a webhook or the API carries it.
      *
-     * @param  list<array<string, string>>  $charges
+     * @param  list<array<string, string|null>>  $charges
      * @return array<string, mixed>
      */
     private static function invoice(string $status, array $charges = []): array

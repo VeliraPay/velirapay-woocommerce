@@ -2,6 +2,11 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
+## 0.4.8 - 2026-11-24
+
+- A webhook is only believed about the mode whose secret signed it: a live delivery signed with a test secret is refused with a 400, since a test secret is often shared with a staging site or a developer. Each endpoint's secret has to be in its own mode's field. A store with a live secret pasted into the test field, or the reverse, now refuses that mode's webhooks until the secret is moved; orders are still completed by the plugin's polling meanwhile.
+- An invoice paid because you accepted a short or late payment in the VeliraPay dashboard is held on hold whatever order its webhooks arrive in, or when none arrive: VeliraPay now says on each of an invoice's charges when it was accepted (`accepted_at`), and the plugin reads that before its own record of earlier webhooks. A short payment the customer topped up completes the order even when the store never saw the top-up.
+
 ## 0.4.7 - 2026-11-20
 
 - Orders with a billing name can pay even when the store has no email address for the customer.

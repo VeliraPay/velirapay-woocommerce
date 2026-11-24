@@ -348,15 +348,15 @@ final class Gateway extends WC_Payment_Gateway
     }
 
     /**
-     * Get every webhook secret, live and test, so a delivery of either mode is verified before its mode is looked at.
+     * Get the webhook secrets of each mode, so a delivery is only believed about the mode whose secret signed it.
      *
-     * @return list<string>
+     * @return array{live: list<string>, test: list<string>}
      */
     public function webhookSecrets(): array
     {
         return [
-            ...Signature::parseSecrets($this->get_option('live_webhook_secret')),
-            ...Signature::parseSecrets($this->get_option('test_webhook_secret')),
+            'live' => Signature::parseSecrets($this->get_option('live_webhook_secret')),
+            'test' => Signature::parseSecrets($this->get_option('test_webhook_secret')),
         ];
     }
 

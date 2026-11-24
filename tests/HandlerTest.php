@@ -64,14 +64,31 @@ final class HandlerTest extends TestCase
         $this->assertSame([], $order->events);
     }
 
-    public function test_a_delivery_signed_with_the_other_modes_secret_is_still_verified(): void
+    /**
+     * A test secret is handed around more freely than a live one, so it cannot vouch for a live order.
+     */
+    public function test_a_live_delivery_signed_with_the_test_secret_is_refused(): void
     {
         $order = new FakeOrder('pending');
         $payload = self::payload('invoice.paid', 'live', ['invoice' => ['code' => 'w7c2h5j9d3kx', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR']]);
 
         $response = $this->handler($order)->handle($payload, Signature::header($payload, self::TEST_SECRET));
 
-        $this->assertSame(200, $response['status']);
+        $this->assertSame(400, $response['status']);
+        $this->assertSame('pending', $order->status);
+        $this->assertSame([], $order->events);
+    }
+
+    /**
+     * A store that pasted one secret into both fields goes on working.
+     */
+    public function test_a_secret_saved_for_both_modes_signs_for_either(): void
+    {
+        $order = new FakeOrder('pending');
+        $payload = self::payload('invoice.paid', 'live', ['invoice' => ['code' => 'w7c2h5j9d3kx', 'status' => 'paid', 'amount' => '49.90', 'currency' => 'EUR']]);
+        $handler = new Handler(new FakeOrders(['w7c2h5j9d3kx' => $order]), new StatusSync, 'live', ['live' => [self::TEST_SECRET], 'test' => [self::TEST_SECRET]]);
+
+        $this->assertSame(200, $handler->handle($payload, Signature::header($payload, self::TEST_SECRET))['status']);
         $this->assertSame('processing', $order->status);
     }
 
@@ -264,7 +281,7 @@ final class HandlerTest extends TestCase
      */
     private function handler(FakeOrder $order, array $superseded = []): Handler
     {
-        return new Handler(new FakeOrders(['w7c2h5j9d3kx' => $order], $superseded), new StatusSync, 'live', [self::LIVE_SECRET, self::TEST_SECRET]);
+        return new Handler(new FakeOrders(['w7c2h5j9d3kx' => $order], $superseded), new StatusSync, 'live', ['live' => [self::LIVE_SECRET], 'test' => [self::TEST_SECRET]]);
     }
 
     /**

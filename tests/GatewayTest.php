@@ -511,7 +511,7 @@ final class GatewayTest extends TestCase
     {
         $payload = (string) json_encode(['id' => 'delivery-'.$event, 'event_id' => 'event-'.$event, 'event' => $event, 'mode' => 'live', 'data' => $data]);
 
-        (new Handler(new WooCommerceOrders, new StatusSync, 'live', [self::SECRET]))->handle($payload, Signature::header($payload, self::SECRET));
+        (new Handler(new WooCommerceOrders, new StatusSync, 'live', ['live' => [self::SECRET], 'test' => []]))->handle($payload, Signature::header($payload, self::SECRET));
     }
 
     /**

@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.3
 WC tested up to: 11.3
-Stable tag: 0.4.7
+Stable tag: 0.4.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -104,6 +104,10 @@ By hand. Send the coins back from your wallet and record the refund in the Velir
 
 == Changelog ==
 
+= 0.4.8 =
+* A webhook is only believed about the mode whose secret signed it, so a test secret cannot mark a live order paid. Keep each webhook secret in its own mode's field.
+* An order whose invoice was paid by accepting a short or late payment is held whatever order its webhooks arrive in, and a short payment topped up completes the order.
+
 = 0.4.7 =
 * Orders with a billing name can pay even when the store has no email address for the customer.
 
@@ -161,6 +165,9 @@ By hand. Send the coins back from your wallet and record the refund in the Velir
 * First release: the payment method, the webhook receiver, the status sync and the settings page.
 
 == Upgrade Notice ==
+
+= 0.4.8 =
+Check that the live webhook secret is in the live field and the test secret in the test field: a webhook signed with the other mode's secret is now refused.
 
 = 0.4.0 =
 Orders paid by accepting a short or late payment now wait on hold for you. The plugin's folder is now velirapay-for-woocommerce: deactivate and delete a copy installed from an earlier zip before uploading this one. Its settings are kept.
