@@ -31,6 +31,11 @@ final class WooCommerceOrder implements Order
     public const INVOICE_URL_META = '_velirapay_invoice_url';
 
     /**
+     * The meta key holding the mode that invoice was made in: "live" or "test".
+     */
+    public const INVOICE_MODE_META = '_velirapay_invoice_mode';
+
+    /**
      * The meta key holding the ids of the webhook events applied to the order.
      */
     public const EVENTS_META = '_velirapay_events';
@@ -81,7 +86,7 @@ final class WooCommerceOrder implements Order
      *
      * @param  array<string, mixed>  $invoice
      */
-    public static function rememberInvoice(WC_Order $order, array $invoice): void
+    public static function rememberInvoice(WC_Order $order, array $invoice, string $mode = ''): void
     {
         $previous = self::invoiceCodeOf($order);
         $code = is_scalar($invoice['id'] ?? null) ? (string) $invoice['id'] : '';
@@ -93,7 +98,23 @@ final class WooCommerceOrder implements Order
 
         $order->update_meta_data(self::INVOICE_CODE_META, $code);
         $order->update_meta_data(self::INVOICE_URL_META, is_scalar($invoice['hosted_url'] ?? null) ? (string) $invoice['hosted_url'] : '');
+
+        // The mode it was made in, whose key is the one that can void it, whatever mode the store is switched to later.
+        if ($mode !== '') {
+            $order->update_meta_data(self::INVOICE_MODE_META, $mode);
+        }
+
         $order->save();
+    }
+
+    /**
+     * Get the mode the order's invoice was made in, "live" or "test", or an empty string for one made before that was kept.
+     */
+    public static function invoiceModeOf(WC_Order $order): string
+    {
+        $mode = $order->get_meta(self::INVOICE_MODE_META);
+
+        return in_array($mode, ['live', 'test'], true) ? $mode : '';
     }
 
     /**

@@ -338,6 +338,16 @@ final class Gateway extends WC_Payment_Gateway
     }
 
     /**
+     * Get a client with the key of the given mode, whichever mode the gateway works in now, or null when that mode has no key of its own.
+     */
+    public function clientOf(string $mode): ?Client
+    {
+        $apiKey = trim($this->get_option($mode === 'test' ? 'test_api_key' : 'live_api_key'));
+
+        return Client::modeOf($apiKey) === $mode ? new Client($apiKey, Plugin::httpTransport(), Plugin::userAgent()) : null;
+    }
+
+    /**
      * Get the mode the gateway works in: "live" or "test".
      */
     public function mode(): string
@@ -564,7 +574,7 @@ final class Gateway extends WC_Payment_Gateway
 
         $invoice = $this->createInvoice($client, $params, $key);
 
-        WooCommerceOrder::rememberInvoice($order, $invoice);
+        WooCommerceOrder::rememberInvoice($order, $invoice, $this->mode());
 
         $order->add_order_note(sprintf(
             /* translators: 1: invoice number, 2: hosted page URL */
@@ -572,6 +582,11 @@ final class Gateway extends WC_Payment_Gateway
             is_scalar($invoice['number'] ?? null) ? (string) $invoice['number'] : '',
             is_scalar($invoice['hosted_url'] ?? null) ? (string) $invoice['hosted_url'] : '',
         ));
+
+        // Made by an earlier request whose answer was lost and paid since: the order is paid, not waiting for a payment.
+        if (($invoice['status'] ?? null) === 'paid') {
+            (new StatusSync)->applyInvoice(new WooCommerceOrder($order), $invoice);
+        }
 
         return $invoice;
     }
@@ -702,31 +717,43 @@ final class Gateway extends WC_Payment_Gateway
     }
 
     /**
-     * Find the open invoice an earlier request with these details made, or null when VeliraPay has none.
+     * Find the invoice an earlier request with these details made, paid since or still open, or null when VeliraPay has none.
      *
      * It is told by what names the order, its return addresses and its memo, beside the amount and the currency.
      *
      * @param  array<string, mixed>  $params  The details the invoice was asked for with.
      * @return array<string, mixed>|null
      *
-     * @throws ApiException when the open invoices could not be read, or more than one fits, so that nothing is created on a guess.
+     * @throws ApiException when the invoices could not be read, or more than one open one fits, so that nothing is created on a guess.
      */
     private function earlierInvoice(Client $client, array $params): ?array
     {
         // What VeliraPay sends back is sanitized as it is decoded, so the details are compared the way they come back.
         $sent = Payload::sanitize($params);
         $term = $sent['customer_email'] ?? $sent['customer_name'] ?? '';
-        $listed = $client->openInvoicesMatching(is_string($term) ? $term : '');
+        $term = is_string($term) ? $term : '';
 
-        $found = array_values(array_filter($listed, static function (array $invoice) use ($sent): bool {
+        $isTheOrders = static function (array $invoice, string $status) use ($sent): bool {
             foreach (['amount', 'currency', 'memo', 'success_url', 'cancel_url'] as $field) {
                 if (($invoice[$field] ?? null) !== ($sent[$field] ?? null)) {
                     return false;
                 }
             }
 
-            return ($invoice['status'] ?? null) === 'open';
-        }));
+            return ($invoice['status'] ?? null) === $status;
+        };
+
+        // One that was paid since stands for the order: a second invoice would ask the customer to pay again.
+        foreach ($client->paidInvoicesMatching($term) as $invoice) {
+            if ($isTheOrders($invoice, 'paid')) {
+                /** @var array<string, mixed> $invoice */
+                return $invoice;
+            }
+        }
+
+        $listed = $client->openInvoicesMatching($term);
+
+        $found = array_values(array_filter($listed, static fn (array $invoice): bool => $isTheOrders($invoice, 'open')));
 
         if (count($found) > 1 || ($found === [] && count($listed) >= Client::LISTED)) {
             throw new ApiException(esc_html__('VeliraPay may already hold an invoice for this order and it could not be told apart. Check the open invoices in the VeliraPay dashboard before the customer tries again.', 'velirapay-for-woocommerce'), 409);

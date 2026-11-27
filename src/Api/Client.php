@@ -111,7 +111,31 @@ final class Client
      */
     public function openInvoicesMatching(string $search): array
     {
-        $invoices = $this->request('GET', 'invoices?'.http_build_query(['status' => 'open', 'search' => $search, 'per_page' => self::LISTED], '', '&', PHP_QUERY_RFC3986));
+        return $this->invoicesMatching($search, 'open');
+    }
+
+    /**
+     * List the paid invoices whose number or customer contains the search text, newest first, up to the most the API gives at once.
+     *
+     * @return list<array<array-key, mixed>>
+     *
+     * @throws ApiException
+     */
+    public function paidInvoicesMatching(string $search): array
+    {
+        return $this->invoicesMatching($search, 'paid');
+    }
+
+    /**
+     * List the invoices of one status whose number or customer contains the search text.
+     *
+     * @return list<array<array-key, mixed>>
+     *
+     * @throws ApiException
+     */
+    private function invoicesMatching(string $search, string $status): array
+    {
+        $invoices = $this->request('GET', 'invoices?'.http_build_query(['status' => $status, 'search' => $search, 'per_page' => self::LISTED], '', '&', PHP_QUERY_RFC3986));
 
         return array_values(array_filter($invoices, 'is_array'));
     }

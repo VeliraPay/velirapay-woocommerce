@@ -265,6 +265,35 @@ final class PluginTest extends TestCase
         $this->assertSame([], $GLOBALS['velirapay_test_events'] ?? []);
     }
 
+    /**
+     * An invoice is voided with the key of the mode it was made in, so one made live is still closed after the store was switched to test mode, right away or from WP-Cron.
+     */
+    public function test_an_invoice_is_voided_in_the_mode_it_was_made_in_after_the_store_switched_modes(): void
+    {
+        $order = $this->pendingOrder();
+        $order->update_meta_data(WooCommerceOrder::INVOICE_MODE_META, 'live');
+        $order->set_status('cancelled');
+        $gateway = (new ReflectionClass(Gateway::class))->newInstanceWithoutConstructor();
+        $gateway->settings = ['live_api_key' => 'vp_live_example', 'test_api_key' => 'vp_test_example', 'testmode' => 'yes'];
+        $GLOBALS['velirapay_test_gateway'] = $gateway;
+        $keys = [];
+        $GLOBALS['velirapay_test_http'] = function (string $url, array $args) use (&$keys): array {
+            $key = is_array($args['headers'] ?? null) ? ($args['headers']['Authorization'] ?? null) : null;
+            $key = is_string($key) ? $key : '';
+            $keys[] = $key;
+
+            return str_contains($key, 'vp_live_')
+                ? ['status' => 200, 'body' => '{"data":{"id":"invoice1042","status":"void"}}']
+                : ['status' => 404, 'body' => '{"message":"No such object."}'];
+        };
+
+        Plugin::voidInvoiceOfCancelledOrder(1042, $order);
+        Plugin::retryVoid(1042, 'invoice1042', 2, 'live');
+
+        $this->assertSame(['Bearer vp_live_example', 'Bearer vp_live_example'], $keys);
+        $this->assertContains('The VeliraPay invoice was voided; it can no longer be paid.', array_column(wc_get_order_notes(['order_id' => 1042]), 'content'));
+    }
+
     public function test_a_voided_invoice_is_noted(): void
     {
         $order = $this->pendingOrder();

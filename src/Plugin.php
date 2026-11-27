@@ -140,7 +140,7 @@ final class Plugin
         add_filter('woocommerce_payment_gateways', [self::class, 'registerGateway']);
         add_action('woocommerce_api_'.Gateway::ID, [self::class, 'receiveWebhook']);
         add_action('woocommerce_order_status_cancelled', [self::class, 'voidInvoiceOfCancelledOrder'], 10, 2);
-        add_action(self::VOID_HOOK, [self::class, 'retryVoid'], 10, 3);
+        add_action(self::VOID_HOOK, [self::class, 'retryVoid'], 10, 4);
         add_action('woocommerce_before_trash_order', [self::class, 'voidInvoiceOfRemovedOrder'], 10, 2);
         add_action('woocommerce_before_delete_order', [self::class, 'voidInvoiceOfRemovedOrder'], 10, 2);
         add_action('wp_trash_post', [self::class, 'voidInvoiceOfTrashedPost']);
@@ -274,7 +274,7 @@ final class Plugin
         $code = WooCommerceOrder::invoiceCodeOf($order);
 
         if ($code !== '') {
-            self::voidInvoice($order->get_id(), $code, $order, 1);
+            self::voidInvoice($order->get_id(), $code, $order, 1, WooCommerceOrder::invoiceModeOf($order));
         }
     }
 
@@ -295,7 +295,7 @@ final class Plugin
 
         // WordPress schedules the same event once, so an order both of its trash hooks see is voided once.
         if ($code !== '') {
-            wp_schedule_single_event(time(), self::VOID_HOOK, [$order->get_id(), $code, 1]);
+            wp_schedule_single_event(time(), self::VOID_HOOK, self::voidArguments($order->get_id(), $code, 1, WooCommerceOrder::invoiceModeOf($order)));
         }
     }
 
@@ -313,7 +313,7 @@ final class Plugin
      * Try again to void an invoice VeliraPay could not be reached to void, from WP-Cron, while its order is still
      * cancelled, or trashed, and still names it; an order deleted since can no longer be asked, so its invoice is voided.
      */
-    public static function retryVoid(mixed $orderId, mixed $code, mixed $attempt): void
+    public static function retryVoid(mixed $orderId, mixed $code, mixed $attempt, mixed $mode = ''): void
     {
         if (! is_int($orderId) || ! is_string($code) || $code === '' || ! is_int($attempt)) {
             return;
@@ -325,7 +325,7 @@ final class Plugin
             return;
         }
 
-        self::voidInvoice($orderId, $code, $order instanceof WC_Order ? $order : null, $attempt);
+        self::voidInvoice($orderId, $code, $order instanceof WC_Order ? $order : null, $attempt, is_string($mode) ? $mode : '');
     }
 
     /**
@@ -719,12 +719,24 @@ final class Plugin
     }
 
     /**
-     * Void an order's invoice with the current mode's key, trying again from WP-Cron when VeliraPay could not be reached,
-     * was busy or failed, and noting the outcome on the order, or in the log once the order is gone.
+     * What a scheduled void is handed: the order, its invoice and the attempt, with the invoice's mode where the order kept it.
+     *
+     * @return array{0: int, 1: string, 2: int, 3?: string}
      */
-    private static function voidInvoice(int $orderId, string $code, ?WC_Order $order, int $attempt): void
+    private static function voidArguments(int $orderId, string $code, int $attempt, string $mode): array
     {
-        $client = self::gateway()->client();
+        return $mode === '' ? [$orderId, $code, $attempt] : [$orderId, $code, $attempt, $mode];
+    }
+
+    /**
+     * Void an order's invoice with the key of the mode it was made in, or the current mode's for one made before its mode
+     * was kept, trying again from WP-Cron when VeliraPay could not be reached, was busy or failed, and noting the outcome
+     * on the order, or in the log once the order is gone.
+     */
+    private static function voidInvoice(int $orderId, string $code, ?WC_Order $order, int $attempt, string $mode = ''): void
+    {
+        // A store switched to the other mode since still voids the invoice where it lives, rather than being told there is none.
+        $client = ($mode !== '' ? self::gateway()->clientOf($mode) : null) ?? self::gateway()->client();
 
         if ($client === null) {
             return;
@@ -745,7 +757,7 @@ final class Plugin
             $delay = self::VOID_RETRY_MINUTES[$attempt - 1] ?? null;
 
             if (self::isTemporary($exception) && $delay !== null) {
-                wp_schedule_single_event(time() + $delay * MINUTE_IN_SECONDS, self::VOID_HOOK, [$orderId, $code, $attempt + 1]);
+                wp_schedule_single_event(time() + $delay * MINUTE_IN_SECONDS, self::VOID_HOOK, self::voidArguments($orderId, $code, $attempt + 1, $mode));
 
                 return;
             }

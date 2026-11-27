@@ -121,12 +121,13 @@ final class GatewayTest extends TestCase
      *
      * @param  int  $held  How many open invoices VeliraPay lists for the order: the one the lost request made, none, or more.
      * @param  int  $listing  The status the list of open invoices answers with.
+     * @param  bool  $paid  Whether the invoice the lost request made was paid before the customer tried again.
      */
-    private function loseTheFirstAnswer(int $held = 1, int $listing = 200): void
+    private function loseTheFirstAnswer(int $held = 1, int $listing = 200, bool $paid = false): void
     {
         $made = null;
 
-        $GLOBALS['velirapay_test_http'] = function (string $url, array $args) use (&$made, $held, $listing): array {
+        $GLOBALS['velirapay_test_http'] = function (string $url, array $args) use (&$made, $held, $listing, $paid): array {
             $route = (is_string($args['method'] ?? null) ? $args['method'] : '').' '.substr($url, strlen('https://api.velirapay.com/v1/'));
             $headers = is_array($args['headers'] ?? null) ? $args['headers'] : [];
             $key = is_string($headers['Idempotency-Key'] ?? null) ? $headers['Idempotency-Key'] : null;
@@ -135,19 +136,41 @@ final class GatewayTest extends TestCase
             $invoice = fn (string $code): array => [...$asked, 'id' => $code, 'number' => 'INV-'.$code, 'status' => 'open', 'hosted_url' => 'https://velirapay.com/i/'.$code, 'charges' => []];
 
             if ($route === 'POST invoices' && $made === null) {
-                $made = $invoice('firstinvoice1');
+                $made = [...$invoice('firstinvoice1'), ...($paid ? ['status' => 'paid', 'charges' => [['id' => 'charge000001', 'status' => 'paid', 'accepted_at' => null, 'paid_at' => '2026-11-27T10:00:00Z']]] : [])];
 
                 return ['status' => 500, 'body' => '{"message":"Server Error"}'];
             }
 
+            // Each list holds the invoices of the status it was asked for.
+            $ofItsStatus = str_contains($route, 'status='.($paid ? 'paid' : 'open'));
+
             return match (true) {
                 $route === 'POST invoices' && str_ends_with((string) $key, '-again') => ['status' => 201, 'body' => (string) json_encode(['data' => $invoice('secondinvoice')])],
                 $route === 'POST invoices' => ['status' => 409, 'body' => '{"message":"A request with this Idempotency-Key was started and its answer was lost.","code":"idempotency_outcome_unknown"}'],
+                str_starts_with($route, 'GET invoices?') && ! $ofItsStatus => ['status' => 200, 'body' => '{"data":[]}'],
                 str_starts_with($route, 'GET invoices?') => ['status' => $listing, 'body' => (string) json_encode(['data' => array_fill(0, $held, $made)])],
                 $route === 'GET invoices/firstinvoice1' => ['status' => 200, 'body' => (string) json_encode(['data' => $made])],
                 default => ['status' => 404, 'body' => '{"message":"No such object."}'],
             };
         };
+    }
+
+    /**
+     * An invoice made by a request whose answer was lost and paid before the customer tried again is the order's: no second invoice asks them to pay twice, and the order is paid.
+     */
+    public function test_an_invoice_whose_answer_was_lost_and_that_was_paid_since_is_not_made_again(): void
+    {
+        $order = new WC_Order(1042);
+        $GLOBALS['velirapay_test_orders'] = [1042 => $order];
+        $this->loseTheFirstAnswer(paid: true);
+
+        $attempts = array_map(fn (int $attempt): array => $this->gateway()->process_payment(1042), [1, 2]);
+
+        $this->assertSame(['result' => 'failure'], $attempts[0]);
+        $this->assertSame('success', $attempts[1]['result']);
+        $this->assertSame('firstinvoice1', WooCommerceOrder::invoiceCodeOf($order));
+        $this->assertTrue($order->is_paid());
+        $this->assertCount(0, array_filter($this->sent, static fn (array $request): bool => $request[0] === 'POST invoices' && str_ends_with((string) $request[1], '-again')));
     }
 
     /**

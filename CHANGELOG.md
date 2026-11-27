@@ -2,6 +2,11 @@
 
 All notable changes to this plugin are documented here. It follows [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+- When VeliraPay cannot say whether an earlier attempt to create an order's invoice went through, the plugin now also looks for that invoice among the paid ones. One that was paid in the meantime becomes the order's and completes it, instead of a second invoice asking the customer to pay again.
+- An order remembers the mode its invoice was made in, and cancelling or trashing the order voids the invoice with that mode's key, at once or from WP-Cron. A store switched to the other mode since used to be told the invoice did not exist, which left it payable. Orders placed before this update are voided with the current mode's key, as before.
+
 ## 0.4.9 - 2026-11-24
 
 - When VeliraPay cannot say whether an earlier attempt to create an order's invoice went through, which it now answers with a 409 for a day rather than risk a second invoice, the plugin looks for that invoice among the open ones, by the order's return addresses, memo, amount and currency, and takes it as the order's. Only when VeliraPay holds none does the checkout go on under a second idempotency key; when the open invoices cannot be read, or more than one fits, nothing is created and the order keeps a note.
