@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.3
 WC tested up to: 11.3
-Stable tag: 0.4.9
+Stable tag: 0.4.10
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -103,6 +103,10 @@ From WordPress.org: WordPress offers each new version on its Plugins and Updates
 By hand. Send the coins back from your wallet and record the refund in the VeliraPay dashboard; the plugin adds a note to the order.
 
 == Changelog ==
+
+= 0.4.10 =
+* An order whose first invoice was paid while the plugin could not tell whether it had been created is now completed from that invoice, instead of the customer being asked to pay a second one.
+* Cancelling or trashing an order voids its invoice in the mode it was made in, even when the store has switched between test and live since.
 
 = 0.4.9 =
 * A void notice delivered after an invoice was paid no longer cancels the order held for you.
